@@ -9,7 +9,7 @@ from pre_processing import trace_pre_processing as tpp
 
 class TracePreProcessingTest(unittest.TestCase):
     def setUp(self):
-        self.json_file = open('./test_trace.json')
+        self.json_file = open('./data/test_trace.json')
         self.trace = json.load(self.json_file)
 
     def test_get_flat_list(self):

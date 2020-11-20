@@ -46,13 +46,14 @@ class MetricPreProcessingTest(unittest.TestCase):
                          mpp._get_output_file_name('/this/is/a/absolute/path/to/a/file.csv'))
 
     def test_get_metrics_on_seconds_interval(self):
-        mpp.get_metrics_on_seconds_interval('./test_metrics.csv')
+        mpp.get_metrics_on_seconds_interval('./data/test_metrics.csv')
 
-        output_file_written = os.path.exists('./test_metrics_seconds.csv')
+        output_file_written = os.path.exists('./data/test_metrics_seconds.csv')
+
         self.assertTrue(output_file_written)
-
-        self.assertTrue(filecmp.cmp('./test_metrics_seconds.csv', 'test_metrics_expected.csv'))
-
+        self.assertTrue(filecmp.cmp('./data/test_metrics_seconds.csv', './data/test_metrics_expected.csv'))
+        
+        os.remove('./data/test_metrics_seconds.csv')
 
 if __name__ == '__main__':
     unittest.main()

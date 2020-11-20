@@ -1,0 +1,77 @@
+{
+  "info": {
+    "started": 0,
+    "last_trace_started": 8,
+    "finished": 11,
+    "name": "1"
+  },
+  "stats": {
+    "wsgi": {
+      "count": 1,
+      "duration": 2
+    },
+    "db": {
+      "count": 3,
+      "duration": 8
+    }
+  },
+  "children": [
+    {
+      "info": {
+        "exception": "None",
+        "name": "wsgi",
+        "service": "public",
+        "started": 0,
+        "finished": 2,
+        "project": "keystone",
+        "host": "wally113"
+      },
+      "parent_id": "1",
+      "trace_id": "2",
+      "children": [
+        {
+          "info": {
+            "exception": "None",
+            "name": "db",
+            "service": "public",
+            "started": 1,
+            "finished": 2,
+            "project": "keystone",
+            "host": "wally113"
+          },
+          "parent_id": "2",
+          "trace_id": "3",
+          "children": []
+        }
+      ]
+    },
+    {
+      "info": {
+        "exception": "None",
+        "name": "db",
+        "service": "public",
+        "started": 3,
+        "finished": 7,
+        "project": "keystone",
+        "host": "wally113"
+      },
+      "parent_id": "test_trace",
+      "trace_id": "4",
+      "children": []
+    },
+    {
+      "info": {
+        "exception": "None",
+        "name": "db",
+        "service": "keystone",
+        "started": 8,
+        "finished": 11,
+        "project": "keystone",
+        "host": "wally113"
+      },
+      "parent_id": "test_trace",
+      "trace_id": "5",
+      "children": []
+    }
+  ]
+}
