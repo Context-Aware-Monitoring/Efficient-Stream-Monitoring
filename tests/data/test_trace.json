@@ -3,7 +3,7 @@
     "started": 0,
     "last_trace_started": 8,
     "finished": 11,
-    "name": "1"
+    "name": "total"
   },
   "stats": {
     "wsgi": {
@@ -22,9 +22,39 @@
         "name": "wsgi",
         "service": "public",
         "started": 0,
+	"meta.raw_payload.wsgi-stop": {
+          "info": {
+            "host": "wally113"
+          },
+          "name": "wsgi-stop",
+          "service": "public",
+          "timestamp": "2019-11-25T16:46:26.934203",
+          "trace_id": "2",
+          "project": "keystone",
+          "parent_id": "test_trace",
+          "base_id": "test_trace"
+        },
         "finished": 2,
         "project": "keystone",
-        "host": "wally113"
+        "host": "wally113",
+        "meta.raw_payload.wsgi-start": {
+          "info": {
+            "host": "wally113",
+            "request": {
+              "path": "/",
+              "scheme": "http",
+              "method": "GET",
+              "query": ""
+            }
+          },
+          "name": "wsgi-start",
+          "service": "public",
+          "timestamp": "2019-11-25T16:46:26.931758",
+          "trace_id": "2",
+          "project": "keystone",
+          "parent_id": "test_trace",
+          "base_id": "test_trace"
+        }	  
       },
       "parent_id": "1",
       "trace_id": "2",
@@ -33,11 +63,41 @@
           "info": {
             "exception": "None",
             "name": "db",
+            "meta.raw_payload.db-stop": {
+              "info": {
+                "host": "wally113"
+              },
+              "name": "db-stop",
+              "service": "public",
+              "timestamp": "2019-11-25T16:46:26.953434",
+              "trace_id": "3",
+              "project": "keystone",
+              "parent_id": "2",
+              "base_id": "test_trace"
+            },
             "service": "public",
             "started": 1,
             "finished": 2,
             "project": "keystone",
-            "host": "wally113"
+            "host": "wally113",
+            "meta.raw_payload.db-start": {
+              "info": {
+                "host": "wally113",
+                "db": {
+                  "params": {
+                    "param_1": "03d2012489864821b20f0aeb3adc3b45"
+                  },
+                  "statement": "SELECT user.enabled AS user_enabled, user.id AS user_id, user.domain_id AS user_domain_id, user.extra AS user_extra, user.default_project_id AS user_default_project_id, user.created_at AS user_created_at, user.last_active_at AS user_last_active_at \nFROM user \nWHERE user.id = %(param_1)s"
+                }
+              },
+              "name": "db-start",
+              "service": "public",
+              "timestamp": "2019-11-25T16:46:26.952615",
+              "trace_id": "3",
+              "project": "keystone",
+              "parent_id": "2",
+              "base_id": "test_trace"
+            }
           },
           "parent_id": "2",
           "trace_id": "3",
@@ -49,10 +109,38 @@
       "info": {
         "exception": "None",
         "name": "db",
+	"meta.raw_payload.db-start": {
+	  "info": {
+	    "host": "wally113",
+	    "db": {
+	      "params": {},
+	      "statement": "SELECT 1"
+	    }
+	  },
+	  "name": "db-start",
+	  "service": "public",
+	  "timestamp": "2019-11-25T16:46:26.951436",
+	  "trace_id": "4",
+	  "project": "keystone",
+	  "parent_id": "test_trace",
+	  "base_id": "test_trace"
+	},
         "service": "public",
         "started": 3,
         "finished": 7,
         "project": "keystone",
+	"meta.raw_payload.db-stop": {
+	  "info": {
+	    "host": "wally113"
+	  },
+	  "name": "db-stop",
+	  "service": "public",
+	  "timestamp": "2019-11-25T16:46:26.951954",
+	  "trace_id": "4",
+	  "project": "keystone",
+	  "parent_id": "test_trace",
+	  "base_id": "test_trace"
+	},
         "host": "wally113"
       },
       "parent_id": "test_trace",
@@ -64,9 +152,39 @@
         "exception": "None",
         "name": "db",
         "service": "keystone",
+        "meta.raw_payload.db-start": {
+	  "info": {
+	    "host": "wally113",
+	    "db": {
+	      "params": {
+		"param_1": "03d2012489864821b20f0aeb3adc3b45"
+	      },
+	      "statement": "SELECT password.created_at AS password_created_at, password.expires_at AS password_expires_at, password.id AS password_id, password.local_user_id AS password_local_user_id, password.password_hash AS password_password_hash, password.created_at_int AS password_created_at_int, password.expires_at_int AS password_expires_at_int, password.self_service AS password_self_service, local_user_1.id AS local_user_1_id \nFROM (SELECT user.id AS user_id, user.domain_id AS user_domain_id \nFROM user \nWHERE user.id = %(param_1)s) AS anon_1 INNER JOIN local_user AS local_user_1 ON anon_1.user_id = local_user_1.user_id AND anon_1.user_domain_id = local_user_1.domain_id INNER JOIN password ON local_user_1.id = password.local_user_id ORDER BY local_user_1.id, password.created_at_int"
+	    }
+	  },
+	  "name": "db-start",
+	  "service": "public",
+	  "timestamp": "2019-11-25T16:46:26.964183",
+	  "trace_id": "5",
+	  "project": "keystone",
+	  "parent_id": "test_trace",
+	  "base_id": "test_trafce"
+	},
         "started": 8,
         "finished": 11,
         "project": "keystone",
+        "meta.raw_payload.db-stop": {
+          "info": {
+	    "host": "wally113"
+	  },
+	  "name": "db-stop",
+	  "service": "public",
+	  "timestamp": "2019-11-25T16:46:26.965620",
+	  "trace_id": "5",
+	  "project": "keystone",
+	  "parent_id": "test_trace",
+	  "base_id": "test_trace"
+	},
         "host": "wally113"
       },
       "parent_id": "test_trace",

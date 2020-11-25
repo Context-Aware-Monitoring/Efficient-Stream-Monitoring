@@ -1,7 +1,20 @@
+import pdb
 """This module turns traces from the json representation into various different representations."""
+def collect_id(event):
+    trace_id = event.get('trace_id')
+
+    if trace_id == None:
+        return [event['name'] + '-start', event['name'] + '-stop']
+    return [trace_id + '-start', trace_id + '-stop']
 
 
-def get_flat_list(json):
+def get_node_columns():
+    return ['name', 'service', 'project', 'host', 'payload']
+
+def collect_id_and_started(event):
+    return [[event['trace_id'], event['info']['started']]]
+
+def get_flat_list(json, collect_function=collect_id_and_started):
     """Transforms the trace from the json to the flat list representation.
 
     Args:
@@ -12,26 +25,9 @@ def get_flat_list(json):
     """
     events = list()
     for child in json['children']:
-        extract_events_flat(
-            child, lambda x: [
-                (x['trace_id'], x['info']['started'])], events)
-    events.sort(key=lambda x: x[1])
+        extract_events_flat(child, collect_function, events)
 
     return events
-
-
-def get_list(json):
-    """Transforms the trace from the json to the list of lists representation, therefore implicitly
-    saving the parent-child relationship between events.
-
-    Args:
-      json: Json representation of trace
-
-    Returns:
-      A list representation where the children of an event are saved in a list.
-    """
-    return list([extract_events(c, lambda x: (x['trace_id'],
-                                              x['info']['started'])) for c in json['children']])
 
 
 def extract_events_flat(json_node, collect_function, events=[]):
@@ -55,25 +51,6 @@ def extract_events_flat(json_node, collect_function, events=[]):
 
     return events
 
-
-def extract_events(json_node, collect_function):
-    """Depth-first search of events returning them as a list of lists, therefore implicitly saving
-    the parent-child relationship between events.
-
-    Args:
-      json_node: Json representation of the current events.
-      collect_function: Function that collects the desired data for events.
-    Returns:
-      A list of lists representation that contains all the events traversed by the depth-first
-      search.
-    """
-    if len(json_node) == 0:
-        return list()
-
-    return list([collect_function(json_node), [extract_events(
-        node, collect_function) for node in json_node['children']]])
-
-
 def get_graph_adjacency_list(json, directed=True):
     """Transforms the trace from the json to the graph adjacency list representation. Edges exist
     between events that have a parent-child relationship.
@@ -85,14 +62,16 @@ def get_graph_adjacency_list(json, directed=True):
     Returns:
       List of edges for the trace
     """
-    edges = list([(json['info']['name'], c['trace_id'])
+    edges = list([[json['info']['name'], c['trace_id']]
                   for c in json['children']])
 
     for child in json['children']:
         extract_events_flat(child, collect_edges_to_children, edges)
 
+    edges = list(filter(lambda x : x != [], edges))
+    
     if not directed:
-        backward_edges = list(map(lambda x: (x[1], x[0]), edges))
+        backward_edges = list(map(lambda x: [x[1], x[0]], edges))
         edges.extend(backward_edges)
 
     return edges
@@ -107,5 +86,5 @@ def collect_edges_to_children(event):
     Returns:
       List of edges from the event to its children
     """
-    return [(event['trace_id'], child['trace_id'])
+    return [[event['trace_id'], child['trace_id']]
             for child in event['children']]
