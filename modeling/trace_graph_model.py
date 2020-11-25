@@ -214,7 +214,7 @@ class TraceGraphModel:
             ]
         )
 
-        edges.extend(self._get_edges_to_children(event))
+        edges.extend(self._get_edges_to_children(event, lambda x: x['trace_id']))
 
         return edges
 
@@ -243,13 +243,12 @@ class TraceGraphModel:
         """
         return event['trace_id']
 
-    def _get_edges_to_children(self, event, access_id_function=get_id):
+    def _get_edges_to_children(self, event, access_id_function):
         """Returns the edges from the current event to all its children.
 
         Args:
           event (json): Json representing the event
           access_id_function (function): Function to retrieve the key for the event.
-            Defaults to self.get_id
 
         Returns:
           Array containing the edges. Edges are represented as dictionaries.
