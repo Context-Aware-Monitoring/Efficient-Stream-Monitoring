@@ -15,31 +15,58 @@ class TracePreProcessingTest(unittest.TestCase):
 
     def test_get_flat_list(self):
         flat_list = tpp.get_flat_list(self.trace)
-        expected_result = [['2', 0], ['3', 1], ['4', 3], ['5', 8]]
+        expected_result = ['2', '3', '4', '5']
         self.assertEqual(flat_list, expected_result)
 
-    def test_get_graph_directed_adjacency_list(self):
-        adjacency_list = tpp.get_graph_adjacency_list(self.trace)
-        expected_result = [['total', '2'], ['total', '4'], ['total', '5'], ['2', '3']]
+    def test_get_flat_list_with_multiple_attributes_collected_per_event(self):
+        flat_list = tpp.get_flat_list(self.trace, lambda x: [[x['trace_id'], x['info']['name']]])
+        expected_result = [['2', 'wsgi'], ['3', 'db'], ['4', 'db'], ['5', 'db']]
+        self.assertEqual(flat_list, expected_result)
 
+    def test_get_flat_list_with_multiple_objects_collected_per_event(self):
+        flat_list = tpp.get_flat_list(self.trace, lambda x: [x['trace_id'] + '-first', x['trace_id'] + '-second'])
+        expected_result = ['2-first', '2-second', '3-first', '3-second', '4-first', '4-second', '5-first', '5-second']
 
-        for elem in adjacency_list:
-            self.assertIn(elem, expected_result)
-            expected_result.remove(elem)
+        self.assertEqual(flat_list, expected_result)
 
-        self.assertEqual(0, len(expected_result))
+    def test_get_flat_list_with_multiple_objects_and_multiple_attributes(self):
+        flat_list = tpp.get_flat_list(self.trace, lambda x: [[x['trace_id']+'-first', 'second attribute'], [x['trace_id'] + '-second', 'second attribute']])
+        expected_result = [['2-first', 'second attribute'], ['2-second', 'second attribute'], ['3-first', 'second attribute'], ['3-second', 'second attribute'], ['4-first', 'second attribute'], ['4-second', 'second attribute'], ['5-first', 'second attribute'], ['5-second', 'second attribute']]
+        self.assertEquals(flat_list, expected_result)
+                                      
+        
+    def test_get_list(self):
+        list_of_lists = tpp.get_list(self.trace)
+        expected_result = [
+            ['2',
+             [
+                 ['3', []]
+             ]
+            ],
+            ['4', []],
+            ['5', []]
+        ]
+        self.assertEqual(list_of_lists, expected_result)
+        
 
-    def test_get_graph_unidirected_adjacency_list(self):
-        adjacency_list = tpp.get_graph_adjacency_list(self.trace, False)
-        expected_result = [['total', '2'], ['2', 'total'], ['total', '4'], ['4', 'total'],
-                           ['total', '5'], ['5', 'total'], ['2', '3'], ['3', '2']]
+    def test_get_list_with_multiple_attributes_collected_per_event(self):
+        list_of_lists = tpp.get_list(self.trace, lambda x: (x['trace_id'], x['info']['name']))
+        expected_result = [
+            [('2', 'wsgi'),
+             [
+                 [('3', 'db'), []]
+             ]
+            ],
+            [('4', 'db'), []],
+            [('5', 'db'), []]
+        ]
 
-        for elem in adjacency_list:
-            self.assertIn(elem, expected_result)
-            expected_result.remove(elem)
+    def test_get_number_of_parents(self):
+        self.assertEqual(tpp.get_number_of_parents(self.trace), 4)
 
-        self.assertEqual(0, len(expected_result))
-
+    def test_get_number_of_children(self):
+        self.assertEqual(tpp.get_number_of_children(self.trace), 1)
+        
     def tearDown(self):
         self.json_file.close()
 

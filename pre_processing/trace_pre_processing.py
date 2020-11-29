@@ -1,20 +1,31 @@
-import pdb
 """This module turns traces from the json representation into various different representations."""
+
+
 def collect_id(event):
-    trace_id = event.get('trace_id')
+    """Collects the trace_id from the event.
 
-    if trace_id == None:
-        return [event['name'] + '-start', event['name'] + '-stop']
-    return [trace_id + '-start', trace_id + '-stop']
+    Args:
+      event (json): Json representing an event of a trace.
+
+    Returns:
+      The trace_id of the event
+    """
+    return event.get('trace_id')
 
 
-def get_node_columns():
-    return ['name', 'service', 'project', 'host', 'payload']
+def collect_id_as_array(event):
+    """Collects the trace_id from the event.
 
-def collect_id_and_started(event):
-    return [[event['trace_id'], event['info']['started']]]
+    Args:
+      event (json): Json representing an event of a trace.
 
-def get_flat_list(json, collect_function=collect_id_and_started):
+    Returns:
+      The trace_id of the event.
+    """
+    return [event.get('trace_id')]
+
+
+def get_flat_list(json, collect_function=collect_id_as_array):
     """Transforms the trace from the json to the flat list representation.
 
     Args:
@@ -30,7 +41,7 @@ def get_flat_list(json, collect_function=collect_id_and_started):
     return events
 
 
-def extract_events_flat(json_node, collect_function, events=[]):
+def extract_events_flat(json_node, collect_function=collect_id, events=[]):
     """Depth-first search of events returning them as a flat list.
 
     Args:
@@ -51,40 +62,41 @@ def extract_events_flat(json_node, collect_function, events=[]):
 
     return events
 
-def get_graph_adjacency_list(json, directed=True):
-    """Transforms the trace from the json to the graph adjacency list representation. Edges exist
-    between events that have a parent-child relationship.
+
+def get_list(json, collect_function=collect_id):
+    """Transforms the trace from the json to the list of lists representation, therefore implicitly
+    saving the parent-child relationship between events.
 
     Args:
-      json: Json representation of the trace
-      directed: Determines whether a directed or unidirected graph is returned
+      json: Json representation of trace
 
     Returns:
-      List of edges for the trace
+      A list representation where the children of an event are saved in a list.
     """
-    edges = list([[json['info']['name'], c['trace_id']]
-                  for c in json['children']])
 
-    for child in json['children']:
-        extract_events_flat(child, collect_edges_to_children, edges)
-
-    edges = list(filter(lambda x : x != [], edges))
-    
-    if not directed:
-        backward_edges = list(map(lambda x: [x[1], x[0]], edges))
-        edges.extend(backward_edges)
-
-    return edges
+    return list([extract_events(c, collect_function) for c in json['children']])
 
 
-def collect_edges_to_children(event):
-    """Returns a list of edges from the current event to its children.
-
+def extract_events(json_node, collect_function):
+    """Depth-first search of events returning them as a list of lists, therefore implicitly saving
+    the parent-child relationship between events.
     Args:
-      event: Event encoded as json
-
+      json_node: Json representation of the current events.
+      collect_function: Function that collects the desired data for events.
     Returns:
-      List of edges from the event to its children
+      A list of lists representation that contains all the events traversed by the depth-first
+      search.
     """
-    return [[event['trace_id'], child['trace_id']]
-            for child in event['children']]
+    if len(json_node) == 0:
+        return []
+
+    extracted_events = list()
+    child_events = json_node['children']
+
+    if child_events == []:
+        extracted_events.extend([collect_function(json_node), []])
+    else:
+        extracted_events.extend([collect_function(json_node), [
+                                extract_events(ce, collect_function) for ce in child_events]])
+
+    return extracted_events
