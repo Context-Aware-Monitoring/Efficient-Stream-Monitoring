@@ -1,15 +1,26 @@
-"""This module capsulates a trace as a graph"""
+"""This module contains functionality to represent traces as different graph models."""
 import os
 import sys
+from abc import ABC, abstractmethod
 import numpy as np
 from pre_processing import trace_pre_processing as tpp
 import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-class TraceGraphModel:
+class AbstractTraceGraphModel(ABC):
     """
-    Class to represent a trace as a graph
+    Abstract class providing the basic functionality to generate a graph model for a trace.
+    Graphs models are constructed the same why:
+    1. Nodes are created. Nodes consists of a set of attributes. The way nodes are created is an
+       implementation detail of the concrete model. Two methods are used to create nodes:
+       _collect_header_nodes: For creating nodes from the informations provided in the head of the
+       json.
+       _collect_event_nodes: For creating nodes from the regular events in the json.
+    2. Edges are created. An edge consists of the following three properties: source, target and
+       weight. Like for nodes there exist two different methods to collect the edges. For the head
+       of the json the method _collect_header_edges, and for normal events in the json the method
+       _collect_event_edges.
 
     Attributes
     ----------
@@ -23,8 +34,10 @@ class TraceGraphModel:
     get_nodes()
         Returns the nodes of the graph
     get_edges()
-
+        Returns the edges of the graph
     """
+
+    NODE_INDEX = "NODE_INDEX"
 
     def __init__(self, json_trace):
         """Initializes the graph from the trace
@@ -53,35 +66,26 @@ class TraceGraphModel:
 
     def _create_nodes_for_trace(self, json_trace):
         """Processes the provided trace and computes the nodes for it.
-        For every event of the trace two nodes are created: one start node and one stop node.
+        The way nodes are created is an implementation detail of the concrete model.
 
         Args:
           json_trace (json): Json representing the trace
         """
-        header_properties = self._collect_header_information()
-        properties = np.array(tpp.get_flat_list(json_trace, self._collect_node_properties))
+        properties = self._collect_header_nodes(json_trace)
+        properties.extend(np.array(tpp.get_flat_list(json_trace, self._collect_event_nodes)))
 
-        header_right_dimensions = self._transform_header_properties_to_proper_dimensions(
-            header_properties, properties)
-
-        properties_with_header = np.concatenate((header_right_dimensions, properties))
-
-        indicies = list(['total-start', 'total-stop'])
-        indicies.extend(tpp.get_flat_list(json_trace, tpp.collect_id))
-        self._nodes = pd.DataFrame(
-            properties_with_header,
-            columns=tpp.get_node_columns(),
-            index=indicies
-        )
+        self._nodes = self._build_data_frame_containing_all_features(properties)
 
     def _create_edges_for_trace(self, json_trace):
-        """Processes the provided trace and computes the edges for it
+        """Processes the provided trace and computes the edges for it.
+        The way edges are created is an implementation detail of the concrete model.
 
         Args:
           json_trace: Json representing the trace
         """
         edges = self._collect_header_edges(json_trace)
-        edges.extend(tpp.get_flat_list(json_trace, self._collect_non_header_edges))
+        edges.extend(tpp.get_flat_list(json_trace, self._collect_event_edges))
+
         source = np.array(list(map(lambda x: x['source'], edges)))
         target = np.array(list(map(lambda x: x['target'], edges)))
         weight = np.array(list(map(lambda x: x['weight'], edges)))
@@ -94,129 +98,91 @@ class TraceGraphModel:
             }
         )
 
-    def _transform_header_properties_to_proper_dimensions(self, header_properties, properties):
-        """This function returns a numpy array that matches the number of columns of the properties
-        array. It copies the values from the header_properties and adds empty missing columns.
+    def _build_data_frame_containing_all_features(self, properties):
+        """Creating a data frame representing the nodes of the graph from the information provided
+        in properties.
 
         Args:
-          header_properties (array): Array with dimensionality (h_rows, h_cols) containing the
-          features from the header event in the trace
-          properties (array): Array with dimensionality (p_rows, p_cols) containing the features
-          from the non-header events in the trace
+          properties (list): List of dicts, where each dict represents one node. The key in the
+          dict are the attribute name, the value is the respective value of that attribute.
 
         Returns:
-          numpy array with dimensionality (h_rows + p_rows, p_cols)
+          Panda data frame representing the nodes.
         """
-        n_features = np.shape(properties)[1]
-        header_rows = len(header_properties)
-        header_right_dimensions = np.empty((header_rows, n_features), dtype='U25')
-        for i, row in enumerate(header_properties):
-            for j, value in enumerate(row):
-                header_right_dimensions[i][j] = value
+        column_names = list()
+        for prop in properties:
+            column_names.extend(list(prop.keys()))
+        column_names = set(column_names)
+        n_properties = len(properties)
 
-        return header_right_dimensions
+        data = {}
+        indicies = list()
+        for current_column_name in column_names:
+            if current_column_name == self.NODE_INDEX:
+                continue
 
-    def _collect_header_information(self):
-        """Collects features from the header event of the trace
+            data[current_column_name] = np.empty(n_properties, dtype='U25')
 
-        Returns:
-          array of features collected for the header event, where features are arrays as well.
-        """
-        return [
-            ['total-start'],
-            ['total-stop']
-        ]
+        i = 0
+        for prop in properties:
+            for column_name, value in prop.items():
+                if column_name == self.NODE_INDEX:
+                    indicies.extend([prop[self.NODE_INDEX]])
+                else:
+                    data[column_name][i] = value
+            i += 1
 
-    def _collect_header_edges(self, header_event):
-        """Collects the edges from the header event. Edges exist between the start and stop
-        header nodes, from the start header node to all the start nodes of children and from the
-        stop node of all children to the stop header node.
+        return pd.DataFrame(data, index=indicies)
+
+    @abstractmethod
+    def _collect_header_nodes(self, json_trace):
+        """Collects nodes from the header data of the json.
 
         Args:
-          header_event (json): Json representing the header event
-
+          json_trace (json): Json representing the trace.
         Returns:
-          List containing dictionaries that represent the edge. Keys in the dictionary are source,
-          target and weight.
+          List of dicts, where a dict represents a node. Keys in the dict correspond to attributes,
+          values to the respective value of that attribute.
         """
-        edges = list()
+        return
 
-        edges.extend(
-            [
-                self._get_edge_dict(
-                    'total-start',
-                    'total-stop',
-                    int(header_event['info']['finished'])
-                )
-            ]
-        )
-
-        edges.extend(self._get_edges_to_children(header_event, lambda x: 'total'))
-
-        return edges
-
-    def _collect_node_properties(self, event):
-        """Collects the node properties for non-header events. For each event two nodes will be
-        returned, one start and one stop node.
+    @abstractmethod
+    def _collect_header_edges(self, json_trace):
+        """Collects the edges from the head of the json.
 
         Args:
-          event (json): Json representing the event
+          json_trace (json): Json representing the trace.
 
         Returns:
-          Array of features, where features are arrays as well.
+          List of dicts, where a dict represents an edge. Dict has three keys: source, target
+          and weight. Source and target should be the ids of nodes, weight an int.
         """
-        name = event['info'].get('name')
-        service = event['info'].get('service')
-        project = event['info'].get('project')
-        host = event['info'].get('host')
-        payload_start_name = 'meta.raw_payload.' + name + '-start'
-        payload_stop_name = 'meta.raw_payload.' + name + '-stop'
-        payload_start = event['info'].get(payload_start_name)
-        payload_stop = event['info'].get(payload_stop_name)
+        return
 
-        return [
-            [
-                name + '-start',
-                service,
-                project,
-                host,
-                hash(str(payload_start))
-            ],
-            [
-                name + '-stop',
-                service,
-                project,
-                host,
-                hash(str(payload_stop))
-            ]
-        ]
-
-    def _collect_non_header_edges(self, event):
-        """Collects the edges from the non-header event. Edges exist between the start and stop
-        event nodes, from the start node to all the start nodes of children and from the stop
-        node of all children to the stop node.
+    @abstractmethod
+    def _collect_event_nodes(self, event):
+        """Collects nodes for regular events of traces.
 
         Args:
-          event (json): Json representing the non-header event
+          event (json): Json representing the currently processed event.
+        Returns:
+          List of dicts, where a dict represents a node. Keys in the dict correspond to attributes,
+          values to the respective value of that attribute.
+        """
+        return
+
+    @abstractmethod
+    def _collect_event_edges(self, event):
+        """Collects the edges for regular events of traces.
+
+        Args:
+          event (json): Json representing the currently processed event.
 
         Returns:
-          List containing dictionaries that represent the edge. Keys in the dictionary are source,
-          target and weight.
+          List of dicts, where a dict represents an edge. Dict has three keys: source, target
+          and weight. Source and target should be the ids of nodes, weight an int.
         """
-        edges = list()
-        edges.extend(
-            [
-                self._get_edge_dict(
-                    event['trace_id'] + '-start',
-                    event['trace_id'] + '-stop',
-                    int(event['info']['finished']) - int(event['info']['started'])
-                )
-            ]
-        )
-
-        edges.extend(self._get_edges_to_children(event, lambda x: x['trace_id']))
-
-        return edges
+        return
 
     def _get_edge_dict(self, source, target, weight):
         """Returns a dictionary representing an edge.
@@ -232,26 +198,108 @@ class TraceGraphModel:
             'weight': weight
         }
 
-    def get_id(self, event):
-        """Function to retrieve the id of a non-header event
 
-        Args:
-          event (json): Json representing a non-header event
+class TraceSpanRepresentation(AbstractTraceGraphModel):
+    """Class representing traces as a span. In a span each event creates two nodes. Edges exist
+    between both of these nodes and its children. The weight of the edge corresponds to the delay
+    of the service."""
 
-        Returns:
-          The id of the event as string.
-        """
-        return event['trace_id']
+    COLUMN_NAME_NAME = 'name'
+    COLUMN_NAME_SERVICE = 'service'
+    COLUMN_NAME_PROJECT = 'project'
+    COLUMN_NAME_HOST = 'host'
+    COLUMN_NAME_PAYLOAD = 'payload'
+
+    def _collect_header_nodes(self, json_trace):
+        properties = [
+            {
+                self.NODE_INDEX: 'total-start',
+                self.COLUMN_NAME_NAME: 'total-start'
+            },
+            {
+                self.NODE_INDEX: 'total-stop',
+                self.COLUMN_NAME_NAME: 'total-stop'
+            }
+        ]
+
+        return properties
+
+    def _collect_header_edges(self, json_trace):
+        edges = list()
+
+        edges.extend(
+            [
+                self._get_edge_dict(
+                    'total-start',
+                    'total-stop',
+                    int(json_trace['info']['finished'])
+                )
+            ]
+        )
+
+        edges.extend(self._get_edges_to_children(json_trace, lambda x: 'total'))
+
+        return edges
+
+    def _collect_event_nodes(self, event):
+        index = event['trace_id']
+        name = event['info'].get('name')
+        service = event['info'].get('service')
+        project = event['info'].get('project')
+        host = event['info'].get('host')
+        payload_start_name = 'meta.raw_payload.' + name + '-start'
+        payload_stop_name = 'meta.raw_payload.' + name + '-stop'
+        payload_start = event['info'].get(payload_start_name)
+        payload_stop = event['info'].get(payload_stop_name)
+
+        return [
+            {
+                self.NODE_INDEX: index + '-start',
+                self.COLUMN_NAME_NAME: name + '-start',
+                self.COLUMN_NAME_SERVICE: service,
+                self.COLUMN_NAME_PROJECT: project,
+                self.COLUMN_NAME_HOST: host,
+                self.COLUMN_NAME_PAYLOAD: str(payload_start)
+            },
+            {
+                self.NODE_INDEX: index + '-stop',
+                self.COLUMN_NAME_NAME: name + '-stop',
+                self.COLUMN_NAME_SERVICE: service,
+                self.COLUMN_NAME_PROJECT: project,
+                self.COLUMN_NAME_HOST: host,
+                self.COLUMN_NAME_PAYLOAD: str(payload_stop)
+            }
+        ]
+
+    def _collect_event_edges(self, event):
+        edges = list()
+        edges.extend(
+            [
+                self._get_edge_dict(
+                    event['trace_id'] + '-start',
+                    event['trace_id'] + '-stop',
+                    int(event['info']['finished']) - int(event['info']['started'])
+                )
+            ]
+        )
+
+        edges.extend(self._get_edges_to_children(event, lambda x: x['trace_id']))
+
+        return edges
 
     def _get_edges_to_children(self, event, access_id_function):
-        """Returns the edges from the current event to all its children.
+        """Returns the edges for the current event. Edges exist between the start node of the event
+        and the start node of the child and between the stop node of the child and the stop node of
+        the event.
 
         Args:
           event (json): Json representing the event
           access_id_function (function): Function to retrieve the key for the event.
 
         Returns:
-          Array containing the edges. Edges are represented as dictionaries.
+          Array containing the edges. Edges are represented as dictionaries. The dictionaries
+          contain three keys: source, target and weight. Source/ target are set to a node ids and
+          weight is an int.
         """
         edges = list()
         for child in event['children']:
@@ -267,6 +315,89 @@ class TraceGraphModel:
                         child['trace_id'] + '-stop',
                         event_id + '-stop',
                         0
+                    )
+                ]
+            )
+
+        return edges
+
+
+class TraceGraphRepresentation(AbstractTraceGraphModel):
+    """Class representing the trace as a graph with a single node per event. Edges exist between
+    events and its children. Weights on edges correspond to the delay between events."""
+
+    COLUMN_NAME_NAME = 'name'
+    COLUMN_NAME_SERVICE = 'service'
+    COLUMN_NAME_PROJECT = 'project'
+    COLUMN_NAME_HOST = 'host'
+    COLUMN_NAME_PAYLOAD_START = 'payload-start'
+    COLUMN_NAME_PAYLOAD_STOP = 'payload-stop'
+    COLUMN_NAME_DURATION = 'duration'
+
+    def _collect_header_nodes(self, json_trace):
+        return [
+            {
+                self.NODE_INDEX: 'total',
+                self.COLUMN_NAME_NAME: 'total',
+                self.COLUMN_NAME_DURATION: json_trace['info']['finished']
+            }
+        ]
+
+    def _collect_header_edges(self, json_trace):
+        edges = list()
+        edges.extend(self._get_edges_to_children(json_trace, lambda x: 'total'))
+
+        return edges
+
+    def _collect_event_nodes(self, event):
+        name = event['info'].get('name')
+        payload_start_name = 'meta.raw_payload.' + name + '-start'
+        payload_stop_name = 'meta.raw_payload.' + name + '-stop'
+        payload_start = event['info'].get(payload_start_name)
+        payload_stop = event['info'].get(payload_stop_name)
+        started = event['info'].get('started')
+        finished = event['info'].get('finished')
+        return [
+            {
+                self.NODE_INDEX: event['trace_id'],
+                self.COLUMN_NAME_NAME: event['info'].get('name'),
+                self.COLUMN_NAME_SERVICE: event['info'].get('service'),
+                self.COLUMN_NAME_PROJECT: event['info'].get('project'),
+                self.COLUMN_NAME_HOST: event['info'].get('host'),
+                self.COLUMN_NAME_PAYLOAD_START: str(payload_start),
+                self.COLUMN_NAME_PAYLOAD_STOP: str(payload_stop),
+                self.COLUMN_NAME_DURATION: str(int(finished) - int(started))
+            }
+        ]
+
+    def _collect_event_edges(self, event):
+        edges = list()
+        edges.extend(self._get_edges_to_children(event, lambda x: x['trace_id']))
+
+        return edges
+
+    def _get_edges_to_children(self, event, access_id_function):
+        """Returns the edges for the current event. Edges exist between the event and all of its
+        children.
+
+        Args:
+          event (json): Json representing the event
+          access_id_function (function): Function to retrieve the key for the event.
+
+        Returns:
+          Array containing the edges. Edges are represented as dictionaries. The dictionaries
+          contain three keys: source, target and weight. Source/ target are set to a node ids and
+          weight is an int.
+        """
+        edges = list()
+        for child in event['children']:
+            event_id = access_id_function(event)
+            edges.extend(
+                [
+                    self._get_edge_dict(
+                        event_id,
+                        child['trace_id'],
+                        int(child['info']['started']) - int(event['info']['started'])
                     )
                 ]
             )
