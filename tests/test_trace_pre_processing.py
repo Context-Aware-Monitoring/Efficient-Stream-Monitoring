@@ -60,12 +60,6 @@ class TracePreProcessingTest(unittest.TestCase):
             [('4', 'db'), []],
             [('5', 'db'), []]
         ]
-
-    def test_get_number_of_parents(self):
-        self.assertEqual(tpp.get_number_of_parents(self.trace), 4)
-
-    def test_get_number_of_children(self):
-        self.assertEqual(tpp.get_number_of_children(self.trace), 1)
         
     def tearDown(self):
         self.json_file.close()
