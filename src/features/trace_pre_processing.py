@@ -100,3 +100,5 @@ def extract_events(json_node, collect_function):
                                 extract_events(ce, collect_function) for ce in child_events]])
 
     return extracted_events
+
+    
