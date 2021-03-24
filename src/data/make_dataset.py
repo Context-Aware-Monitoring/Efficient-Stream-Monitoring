@@ -5,6 +5,7 @@ import sys
 from datetime import datetime
 import pandas as pd
 import reward
+from sklearn import preprocessing
 
 def clean_metrics_data(metrics_dir, start, end):
     """Cleans the metrics csv files by removing the rows that don't lie within
@@ -37,17 +38,20 @@ def clean_metrics_data(metrics_dir, start, end):
         )
         df_without_missing_timestamps.interpolate(method='linear', axis=0, inplace=True)
 
+        normalized_df = (df_without_missing_timestamps-df_without_missing_timestamps.min()) / (df_without_missing_timestamps.max() - df_without_missing_timestamps.min())
+
+        normalized_df = normalized_df.fillna(1.0)
 
         new_filepath = current_path.replace('raw', 'interim')
         new_file_dir = metrics_dir.replace('raw', 'interim')
         if not os.path.exists(new_file_dir):
             os.makedirs(new_file_dir)
-        df_without_missing_timestamps.to_csv(new_filepath, index=True,index_label='now')
+        normalized_df.to_csv(new_filepath, index=True,index_label='now')
 
 if __name__ == '__main__':
     args = sys.argv
     if len(args) == 1:
-        print("Possible arguments are --rewards, --context, --all")
+        print("Possible arguments are --clean, --rewards, --all")
     args = args[1:]
     if "--all" in args:
         args = ['--clean', '--rewards']
@@ -56,15 +60,15 @@ if __name__ == '__main__':
         stime = datetime.now()
         if arg == '--clean':
             print("Cleaning metrics data")
-            clean_metrics_data(
-                '../../data/raw/sequential_data/metrics/',
-                datetime(2019,11,19,18,38,39),
-                datetime(2019,11,20,1,30,0)
-            )
+            # clean_metrics_data(
+            #     '../../data/raw/sequential_data/metrics/',
+            #     datetime(2019,11,19,18,38,39),
+            #     datetime(2019,11,20,1,30,0)
+            # )
             clean_metrics_data(
                 '../../data/raw/concurrent_data/metrics/',
-                datetime(2019,11,19,16,12,13),
-                datetime(2019,11,20,20,45,00)
+                datetime(2019,11,25,16,12,13),
+                datetime(2019,11,25,20,45,00)
             )
         elif arg == '--rewards':
             print("Generating rewards")
@@ -76,6 +80,39 @@ if __name__ == '__main__':
                     '../../data/interim/sequential_data/metrics/wally123_metrics.csv',
                     '../../data/interim/sequential_data/metrics/wally124_metrics.csv'
                 ]
+            )
+            reward.generate_reward_csv(
+                [
+                    '../../data/interim/sequential_data/metrics/wally113_metrics.csv',
+                    '../../data/interim/sequential_data/metrics/wally117_metrics.csv',
+                    '../../data/interim/sequential_data/metrics/wally122_metrics.csv',
+                    '../../data/interim/sequential_data/metrics/wally123_metrics.csv',
+                    '../../data/interim/sequential_data/metrics/wally124_metrics.csv'
+                ],
+                corr='pear',
+                normalize=False
+            )
+            reward.generate_reward_csv(
+                [
+                    '../../data/interim/concurrent_data/metrics/wally113_metrics_concurrent.csv',
+                    '../../data/interim/concurrent_data/metrics/wally117_metrics_concurrent.csv',
+                    '../../data/interim/concurrent_data/metrics/wally122_metrics_concurrent.csv',
+                    '../../data/interim/concurrent_data/metrics/wally123_metrics_concurrent.csv',
+                    '../../data/interim/concurrent_data/metrics/wally124_metrics_concurrent.csv'
+                ],
+                sequential=False
+            )
+            reward.generate_reward_csv(
+                [
+                    '../../data/interim/concurrent_data/metrics/wally113_metrics_concurrent.csv',
+                    '../../data/interim/concurrent_data/metrics/wally117_metrics_concurrent.csv',
+                    '../../data/interim/concurrent_data/metrics/wally122_metrics_concurrent.csv',
+                    '../../data/interim/concurrent_data/metrics/wally123_metrics_concurrent.csv',
+                    '../../data/interim/concurrent_data/metrics/wally124_metrics_concurrent.csv'
+                ],
+                corr='pear',
+                normalize=False,
+                sequential=False
             )
         else:
             sys.exit('Invalid argument %s found' %arg)

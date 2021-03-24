@@ -2,10 +2,13 @@
 """
 from datetime import datetime, timedelta
 import pandas as pd
+import numpy as np
 from sklearn.metrics import mutual_info_score
+import pdb
 
 corr_methods = {
-    'MI': lambda window, arms: _calculate_mutual_information_for_window_df(window, arms)
+    'MI': lambda window, arms: _calculate_mutual_information_for_window_df(window, arms),
+    'pear': lambda window, arms: _calculate_pearson_coefficient_for_window_df(window, arms)
 }
 
 def generate_reward_csv(
@@ -14,6 +17,7 @@ def generate_reward_csv(
         step=5,
         corr='MI',
         normalize=True,
+        sequential=True,
         outdir='../../data/processed/'
 ):
     """Writes a reward.csv file that can be processed by a bandit
@@ -46,7 +50,8 @@ def generate_reward_csv(
     if normalize:
         _normalize_reward_df(reward_df)
 
-    filepath = ("%srewards_w%d_s%d_%s_n%d.csv" % (outdir, window_size, step, corr, normalize))
+    seq_or_con = 'seq' if sequential else 'con'
+    filepath = ("%s%s_rewards_w%d_s%d_%s_n%d.csv" % (outdir, seq_or_con, window_size, step, corr, normalize))
     reward_df.to_csv(filepath, index=False)
 
     print('Wrote file %s' % filepath)
@@ -181,14 +186,39 @@ def _calculate_mutual_information_for_window_df(window_df, arms):
 
     Returns
       Float[]: The mutual information for the arms.
-
     """
     reward = [0] * len(arms)
 
     for i, column_name in enumerate(arms):
         individual_columns = column_name.split('-')
         mutual_information = mutual_info_score(
-            window_df[individual_columns[0]], window_df[individual_columns[1]])
+            window_df[individual_columns[0]], window_df[individual_columns[1]]
+        )
         reward[i] = mutual_information
+
+    return reward
+
+
+def _calculate_pearson_coefficient_for_window_df(window_df, arms):
+    """Computes the pairwise absolute pearson coefficient for the arms (pairs
+    of metrics) in the window_df dataframe.
+
+    Args:
+      window_df (DataFrame): DataFrame containing the metrics values for each
+      arm.
+      arms (string[]): Array of strings representing the arms (pairs of
+      metrics).
+      An arm is represented by the string representation metric1-metric2.
+
+    Returns
+      Float[]: The absolute of the pearson correlation for the arms.
+    """
+    reward = [0] * len(arms)
+    for i, column_name in enumerate(arms):
+        individual_columns = column_name.split('-')
+        correlation_matrix = np.corrcoef(
+            window_df[individual_columns[0]], window_df[individual_columns[1]]
+        )
+        reward[i] = 0.0 if np.isnan(correlation_matrix[0][1]) else abs(correlation_matrix[0][1])
 
     return reward

@@ -1,7 +1,9 @@
 """This module computes some basic properties of traces."""
 
 import os
-from data import context
+import sys
+sys.path.append("./features")
+import context
 import json
 
 def get_number_of_parents(trace_json):

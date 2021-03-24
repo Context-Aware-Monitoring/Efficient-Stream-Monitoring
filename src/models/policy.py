@@ -176,7 +176,7 @@ class DKEGreedy(EGreedy):
             host1, host2 = host_metrics[0][0:8], host_metrics[1][0:8]
 
             if host1 not in ('wally113', host2):
-                self.expected_values[i] = 0.0
+                self.expected_values[i] = 0.25
 
     def get_name(self):
         if self.epsilon != 0:

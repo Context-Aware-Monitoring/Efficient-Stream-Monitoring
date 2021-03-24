@@ -1,6 +1,4 @@
 import sys
-sys.path.append("./pre_processing")
-
 import yaml
 import pdb
 import pandas as pd

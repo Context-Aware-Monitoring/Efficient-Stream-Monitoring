@@ -1,11 +1,13 @@
-from modeling.trace_graph_model import TraceGraphRepresentation
+import sys
+from trace_graph_model import TraceGraphRepresentation
 from bokeh.plotting import figure, show, curdoc
 from bokeh.models import ColumnDataSource, HoverTool, FileInput, RadioButtonGroup, Range1d, Div
 from bokeh.layouts import column, row
 import json
 import pandas as pd
 import pdb
-from pre_processing import trace_pre_processing as tpp
+sys.path.append("../features")
+import trace_pre_processing as tpp
 import bokeh.colors
 import base64
 
