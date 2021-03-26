@@ -60,11 +60,11 @@ if __name__ == '__main__':
         stime = datetime.now()
         if arg == '--clean':
             print("Cleaning metrics data")
-            # clean_metrics_data(
-            #     '../../data/raw/sequential_data/metrics/',
-            #     datetime(2019,11,19,18,38,39),
-            #     datetime(2019,11,20,1,30,0)
-            # )
+            clean_metrics_data(
+                '../../data/raw/sequential_data/metrics/',
+                datetime(2019,11,19,18,38,39),
+                datetime(2019,11,20,1,30,0)
+            )
             clean_metrics_data(
                 '../../data/raw/concurrent_data/metrics/',
                 datetime(2019,11,25,16,12,13),

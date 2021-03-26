@@ -2,7 +2,7 @@ import sys
 import yaml
 import pdb
 import pandas as pd
-from policy import RandomPolicy, MPTS, ContextualBandit, MostFrequentMapper, KMeansMapper, PushMPTS, AbstractContextualBandit, EGreedy, DKEGreedy
+from models.policy import RandomPolicy, MPTS, ContextualBandit, MostFrequentMapper, KMeansMapper, PushMPTS, AbstractContextualBandit, EGreedy, DKEGreedy
 from matplotlib import pyplot as plt
 from datetime import datetime
 import re
