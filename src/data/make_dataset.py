@@ -5,7 +5,6 @@ import sys
 from datetime import datetime
 import pandas as pd
 import reward
-from sklearn import preprocessing
 
 def clean_metrics_data(metrics_dir, start, end):
     """Cleans the metrics csv files by removing the rows that don't lie within
@@ -39,7 +38,6 @@ def clean_metrics_data(metrics_dir, start, end):
         df_without_missing_timestamps.interpolate(method='linear', axis=0, inplace=True)
 
         normalized_df = (df_without_missing_timestamps-df_without_missing_timestamps.min()) / (df_without_missing_timestamps.max() - df_without_missing_timestamps.min())
-
         normalized_df = normalized_df.fillna(1.0)
 
         new_filepath = current_path.replace('raw', 'interim')
@@ -114,6 +112,108 @@ if __name__ == '__main__':
                 normalize=False,
                 sequential=False
             )
+            for threshold in [0.6,0.7,0.8]:
+                reward.generate_reward_csv(
+                    [
+                        '../../data/interim/sequential_data/metrics/wally113_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally117_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally122_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally123_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally124_metrics.csv'
+                    ],
+                    kind='threshold',
+                    threshold=threshold
+                )
+                reward.generate_reward_csv(
+                    [
+                        '../../data/interim/sequential_data/metrics/wally113_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally117_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally122_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally123_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally124_metrics.csv'
+                    ],
+                    corr='pear',
+                    normalize=False,
+                    kind='threshold',
+                    threshold=threshold
+                )
+                reward.generate_reward_csv(
+                    [
+                        '../../data/interim/concurrent_data/metrics/wally113_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally117_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally122_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally123_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally124_metrics_concurrent.csv'
+                    ],
+                    sequential=False,
+                    kind='threshold',
+                    threshold=threshold
+                )
+                reward.generate_reward_csv(
+                    [
+                        '../../data/interim/concurrent_data/metrics/wally113_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally117_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally122_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally123_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally124_metrics_concurrent.csv'
+                    ],
+                    corr='pear',
+                    normalize=False,
+                    sequential=False,
+                    kind='threshold',
+                    threshold=threshold
+                )
+            for L in [5,10,20,50,100]:
+                reward.generate_reward_csv(
+                    [
+                        '../../data/interim/sequential_data/metrics/wally113_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally117_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally122_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally123_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally124_metrics.csv'
+                    ],
+                    kind='top',
+                    L=L
+                )
+                reward.generate_reward_csv(
+                    [
+                        '../../data/interim/sequential_data/metrics/wally113_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally117_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally122_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally123_metrics.csv',
+                        '../../data/interim/sequential_data/metrics/wally124_metrics.csv'
+                    ],
+                    corr='pear',
+                    normalize=False,
+                    kind='top',
+                    L=L
+                )
+                reward.generate_reward_csv(
+                    [
+                        '../../data/interim/concurrent_data/metrics/wally113_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally117_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally122_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally123_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally124_metrics_concurrent.csv'
+                    ],
+                    sequential=False,
+                    kind='top',
+                    L=L
+                )
+                reward.generate_reward_csv(
+                    [
+                        '../../data/interim/concurrent_data/metrics/wally113_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally117_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally122_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally123_metrics_concurrent.csv',
+                        '../../data/interim/concurrent_data/metrics/wally124_metrics_concurrent.csv'
+                    ],
+                    corr='pear',
+                    normalize=False,
+                    sequential=False,
+                    kind='top',
+                    L=L
+                )
         else:
             sys.exit('Invalid argument %s found' %arg)
         print('Finished, took %d seconds' %

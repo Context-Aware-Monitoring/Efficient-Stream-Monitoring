@@ -4,12 +4,12 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 from sklearn.metrics import mutual_info_score
-import pdb
 
 corr_methods = {
     'MI': lambda window, arms: _calculate_mutual_information_for_window_df(window, arms),
     'pear': lambda window, arms: _calculate_pearson_coefficient_for_window_df(window, arms)
 }
+
 
 def generate_reward_csv(
         metrics_file_paths,
@@ -18,7 +18,9 @@ def generate_reward_csv(
         corr='MI',
         normalize=True,
         sequential=True,
-        outdir='../../data/processed/'
+        outdir='../../data/processed/',
+        kind='continous',
+        **kwargs
 ):
     """Writes a reward.csv file that can be processed by a bandit
     algorithm.
@@ -38,25 +40,34 @@ def generate_reward_csv(
     Returns:
       String: Filepath of the generated file.
     """
-    unified_metrics_df = _generate_unified_metrics_dataframe(metrics_file_paths)
+    unified_metrics_df = _generate_unified_metrics_dataframe(
+        metrics_file_paths)
 
     reward_df = _generate_windowed_reward_df(
         unified_metrics_df,
         window_size,
         step,
-        corr
+        corr,
+        kind,
+        **kwargs
     )
 
     if normalize:
         _normalize_reward_df(reward_df)
 
     seq_or_con = 'seq' if sequential else 'con'
-    filepath = ("%s%s_rewards_w%d_s%d_%s_n%d.csv" % (outdir, seq_or_con, window_size, step, corr, normalize))
+    if kind == 'top':
+        kind += '_' + str(kwargs['L'])
+    elif kind == 'threshold':
+        kind += '_' + str(kwargs['threshold'])
+    filepath = ("%s%s_rewards_w%d_s%d_%s_n%d_%s.csv" %
+                (outdir, seq_or_con, window_size, step, corr, normalize, kind))
     reward_df.to_csv(filepath, index=False)
 
     print('Wrote file %s' % filepath)
 
     return filepath
+
 
 def convert_now_column_to_datetime(dataframe):
     """Converts the now column in the DataFrame to a datetime object.
@@ -65,7 +76,8 @@ def convert_now_column_to_datetime(dataframe):
       df (DataFrame): DataFrame containing a now column
 
     """
-    ts_to_datetime = lambda ts: datetime.strptime(ts.split(' CEST')[0], '%Y-%m-%d %H:%M:%S')
+    def ts_to_datetime(ts): return datetime.strptime(
+        ts.split(' CEST')[0], '%Y-%m-%d %H:%M:%S')
     dataframe['now'] = dataframe['now'].apply(ts_to_datetime)
 
 
@@ -100,12 +112,13 @@ def _generate_unified_metrics_dataframe(paths):
     return unified_df
 
 
-
 def _generate_windowed_reward_df(
         unified_metrics_df,
         window_size,
         step,
-        corr
+        corr,
+        kind='continous',
+        **kwargs
 ):
     """
     Generated a DataFrame for the rewards based on the passed dataframe
@@ -121,6 +134,13 @@ def _generate_windowed_reward_df(
       step (int): Step of the sliding window
       corr (string): Measure of correlation that is used. Possible options are:
       'MI'
+      kind: Specify how the reward is computed.
+      Options:
+        continuos: Just reward the measure of correlation
+        top: A binary reward, 1 if arm is one of L highest correlated arms, 0
+        if not. L is passed in **kwargs.
+        threshold: A binary reward is rewarded for arms whose correlation
+        exceeds a threshold. The threshold is passed in **kwargs.
 
     Returns:
       DataFrame: An empty DataFrame where each column represents an arm.
@@ -143,11 +163,23 @@ def _generate_windowed_reward_df(
     while (cur + timedelta_window) <= end:
         window = unified_metrics_df.loc[pd.date_range(
             start=cur, end=(cur + timedelta_window), freq='1S')]
-        reward_df.loc[i] = corr_methods[corr](window, arms)
+        correlation_for_arms = corr_methods[corr](window, arms)
+        if kind == 'continous':
+            reward_df.loc[i] = correlation_for_arms
+        elif kind == 'threshold':
+            threshold = kwargs['threshold']
+            reward_df.loc[i] = list(
+                map(lambda cv: cv >= threshold, correlation_for_arms))
+        elif kind == 'top':
+            L = kwargs['L']
+            Lhighest_value = sorted(correlation_for_arms)[-L]
+            reward_df.loc[i] = list(
+                map(lambda cv: cv >= Lhighest_value, correlation_for_arms))
         i += 1
         cur += timedelta(seconds=step)
 
     return reward_df
+
 
 def _normalize_reward_df(reward_df):
     """
@@ -172,6 +204,7 @@ def _normalize_reward_df(reward_df):
         def norm(cell_value):
             return (cell_value-row_min) / (row_max-row_min)
         reward_df.loc[i] = reward_df.loc[i].apply(norm)
+
 
 def _calculate_mutual_information_for_window_df(window_df, arms):
     """Computes the pairwise mutual information for the arms (pairs of metrics)
@@ -219,6 +252,7 @@ def _calculate_pearson_coefficient_for_window_df(window_df, arms):
         correlation_matrix = np.corrcoef(
             window_df[individual_columns[0]], window_df[individual_columns[1]]
         )
-        reward[i] = 0.0 if np.isnan(correlation_matrix[0][1]) else abs(correlation_matrix[0][1])
+        reward[i] = 0.0 if np.isnan(correlation_matrix[0][1]) else abs(
+            correlation_matrix[0][1])
 
     return reward
