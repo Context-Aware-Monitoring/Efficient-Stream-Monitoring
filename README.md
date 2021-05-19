@@ -13,10 +13,10 @@ First setup the conda enviroment and install the required packages:
 conda create --name eff_str_mon -y
 conda activate eff_str_mon
 conda install pip
-pip install -y -r requirements.txt
+pip install -r requirements.txt
 ```
 
-Next generate the required data for experiments:
+Place the .zip files containing the data into the the root source of the project. Next generate the required data for experiments:
 
 ```sh
 make data
