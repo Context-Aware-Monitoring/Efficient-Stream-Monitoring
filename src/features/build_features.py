@@ -1,8 +1,13 @@
 """Generates context.csv files that are used by contextual bandits.
 """
+from os.path import dirname, abspath
 import sys
 import csv
+import itertools
 import context
+
+DATA_DIR = '%s/data' % dirname(dirname(dirname(abspath(__file__))))
+
 
 def _get_headers_from_csv_file(filepath):
     headers = None
@@ -23,44 +28,29 @@ if __name__ == '__main__':
 
     for arg in args:
         if arg == '--context':
-            context.generate_context_csv(
-                context.HostExtractor(),
-                ['../../data/raw/sequential_data/traces/boot_delete/'],
-                outdir='../../data/processed/'
-            )
-            context_filepath = context.generate_context_csv(
-                context.WorkloadExtractor(),
-                [
-                    '../../data/raw/sequential_data/traces/boot_delete/',
-                    '../../data/raw/sequential_data/traces/image_create_delete/',
-                    '../../data/raw/sequential_data/traces/network_create_delete/'
-                ],
-                outdir='../../data/processed/'
-            )
-
-            context_filepath = '../../data/processed/context_workload-extractor-start-stop_s20191119-183839_e20191120-013000_sbd-sicd-sncd_w30_s5.csv'
-
-            reward_filepath = '../../data/processed/seq_rewards_w30_s5_MI_n1.csv'
-
-            arms = _get_headers_from_csv_file(reward_filepath)
-            context_header = _get_headers_from_csv_file(context_filepath)
-
-            context_transformer = context.PushContextTransformer(
-                arms,
-                context_header
-            )
-            context.transform_context_csv(
-                context_filepath, context_transformer, '../../data/processed/context_push_active_hosts.csv')
-
-            context_distance_transformer = context.PushContextDistanceBasedTransformer(
-                arms,
-                context_header
-            )
-
-            for d in [50, 100, 200, 500, 1000]:
-                context_distance_transformer.set_distance(d)
-                context.transform_context_csv(context_filepath, context_distance_transformer,
-                                              '../../data/processed/context_push_distance_based_d%d.csv' % d)
-
+            for seq, window_size, window_step in itertools.product(
+                [True, False],
+                [10, 30, 60],
+                    [1, 5, 10]):
+                context.generate_context_csv(
+                    context.HostExtractor(),
+                    ['%s/raw/sequential_data/traces/boot_delete/' % DATA_DIR,
+                     '%s/raw/sequential_data/traces/image_create_delete/' %
+                     DATA_DIR,
+                     '%s/raw/sequential_data/traces/network_create_delete/' %
+                     DATA_DIR],
+                    seq=seq, window_size=window_size, step=window_step,
+                    outdir='%s/processed/context/' % DATA_DIR,
+                    columns=['wally113', 'wally117', 'wally122', 'wally123',
+                             'wally124'])
+                context_filepath = context.generate_context_csv(
+                    context.WorkloadExtractor(),
+                    ['%s/raw/sequential_data/traces/boot_delete/' % DATA_DIR,
+                     '%s/raw/sequential_data/traces/image_create_delete/' %
+                     DATA_DIR,
+                     '%s/raw/sequential_data/traces/network_create_delete/' %
+                     DATA_DIR],
+                    seq=seq, window_size=window_size, step=window_step,
+                    outdir='%s/processed/context/' % DATA_DIR)
         else:
             sys.exit('Invalid argument %s found' % arg)

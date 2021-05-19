@@ -2,276 +2,416 @@
 It contains both contextual and non-contextual policies.
 """
 
-from random import seed, random, sample, randrange
 from abc import ABC, abstractmethod
 import numpy as np
-import pandas as pd
-from sklearn.cluster import KMeans
-
-class AbstractBandit(ABC):
-    """Provides functionality for a basic non-contextual bandit.
-
-    Attributes:
-      _K (int): Total number of available arms
-      _L (int): Number of arms to pick each iteration
-      _picked_arms (int[]): Indicies of lastest selected arms # maybe use array instead
-      _iteration (int): Current iteration
-      _regret (float[]): Regret for each of the earlier rounds
-    """
-
-    def __init__(self, L, K):
-        self._L = L
-        self._K = K
-        self._picked_arms = None
-        self._iteration = 0
-        self._regret = []
-
-    @abstractmethod
-    def pick_arms(self):
-        """Picks arms for the current round and saves them to self._picked_arms
-        """
-        return
-
-    def get_picked_arms(self):
-        """Returns self._picked_arms
-
-        Returns:
-          int[]: Indicies of picked arms in the most recent iteration
-        """
-        return self._picked_arms
-
-    def learn(self, reward, max_reward):
-        """Improve the policy by adjusting the picking strategy
-
-        Args:
-          reward (float[]): Contains the reward for each of the picked arms.
-          reward[i] contains the reward for self._picked_arms[i].
-          max_reward (float): The reward an optimal picking strategy would have
-          obtained this round.
-        """
-        self._regret.append(max_reward - sum(reward))
-        self._iteration += 1
-
-    def get_regret(self):
-        """Returns self._regret
-
-        Returns:
-          float[]: The regret for each round.
-        """
-        return self._regret
-
-    @abstractmethod
-    def get_name(self):
-        """Returns the name of the policy.
-
-        Returns:
-          string: Name of the policy
-        """
-        return
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from contextualbandits.online import EpsilonGreedy
 
 
-class AbstractContextualBandit(AbstractBandit):
-    """Provides functionality for a basic contextual bandit.
-    """
-    @abstractmethod
-    def pick_arms(self, context):
-        return
-
-
-class RandomPolicy(AbstractBandit):
-    """Policy that picks arms randomly.
-    """
-
-    def __init__(self, L, K, random_seed):
-        """Constructs the random policy.
-
-        Args:
-          L (int): Number of arms to pick each round
-          K (int): Number of total arms
-          random_seed (int): Seed for pseudo random generator
-        """
-        super().__init__(L, K)
-        seed(random_seed)
-
-    def get_name(self):
-        return 'random'
-
-    def pick_arms(self):
-        self._picked_arms = sample(range(self._K), self._L)
-
-
-class EGreedy(AbstractBandit):
-    """E-Greedy bandit algorithm that picks the greedily arms with highest
-    expected reward with probability 1-e (exploitation) and random arms with
-    probablity e (exploration).
-    """
-
-    def __init__(self, L, K, seed, epsilon):
-        """Constrcuts the E-Greedy bandit algorithm.
-
-        Args:
-          L (int): Number of arms to pick each round
-          K (int): Number of total arms
-          seed (int): Seed for the pseudo random generator
-          epsilon (float): Epsilon parameter of the algorithm. The Algorithm
-          performs an exploitation step with probability 1-epsilon and an
-          exploration step with probability epsilon.
-        """
-        super().__init__(L, K)
-        self._epsilon = epsilon
-        self._expected_values = [1] * self._K
-        self._num_plays = [0] * self._K
-
-    def get_name(self):
-        if self._epsilon != 0:
-            return str(self._epsilon) + '-greedy'
-        return 'greedy'
-
-    def pick_arms(self):
-        if self._epsilon > random():
-            self._picked_arms = sample(range(self._K), self._L)
-        else:
-            self._picked_arms = np.argsort(self._expected_values)[-self._L:]
-
-    def learn(self, reward, max_reward):
-        for posrew, iarm in enumerate(self._picked_arms):
-            self._num_plays[iarm] += 1
-            self._expected_values[iarm] = ((self._num_plays[iarm] - 1) *
-                                           self._expected_values[iarm] + reward[posrew]) / self._num_plays[iarm]
-
-        self._iteration += 1
-        self._regret.append(max_reward - sum(reward))
-
-    def add_to_expected_value(self, arm_index, value):
-        self._expected_values[arm_index] += value
-
-    def multiply_expected_value(self, arm_index, factor):
-        self._expected_values[arm_index] *= factor
+def repeat_entry_L_times(X, L):
+    return np.tile(X, L).reshape(-1, X.shape[1])
 
 
 def extract_hosts_from_arm(arm):
+    """Arm names have the following format:
+    host1.metric1-host2.metric2
+
+    Extracts and returns the name of the two hosts from the arm and returns
+    them. The names of the host might be the same.
+
+    Args:
+      arm (string): Name of the arm in format host1.metrics1-host2.metrics2
+
+    Returns:
+      (string, string): Names of the hosts
+    """
     host_metrics = arm.split('-')
     host1, host2 = host_metrics[0][0:8], host_metrics[1][0:8]
 
     return host1, host2
 
 
+class AbstractBandit(ABC):
+    """Provides functionality for a basic non-contextual bandit.
+
+    Attributes:
+      L (int): Number of arms picked each iteration
+      K (int): Total number of arms
+      T (int): Number of iterations
+      iteration (int): Current iteration
+      overall_regret (float): Total regret of the bandit
+      regret (float[]): Regret for each round
+      cum_regret (float[]): Cumulated regret for each round
+      average_regret (float): Average regret per round
+      name (string): Name of the bandit
+
+    Methods:
+      run: Runs the bandit. Picks each round L out of K arms and computes the
+      regret.
+    """
+
+    def __init__(self, L, reward_df, identifier=None):
+        """Constructs the bandit
+
+        Args:
+          L (int): Number of arms to pick
+          reward_df (DataFrame): This data frame contains the reward for each
+          arm (columns) and iteration (rows).
+          identifier (string): Id for the bandit. If an id is provided the name
+          property returns this id, otherwise the bandit computes a name by
+          depending on its parameters.
+        """
+        self._L = L
+        self._K = len(reward_df.columns)
+        self._reward_df = reward_df
+        self._arms = reward_df.columns.values
+        self._T = len(reward_df.index)
+
+        self._picked_arms_indicies = None
+        self._iteration = 0
+        self._regret = np.zeros(self._T)
+        self._identifier = identifier
+
+    @property
+    def L(self):
+        """Number of arms to pick each iteration
+
+        Returns:
+          int
+        """
+        return self._L
+
+    @property
+    def K(self):
+        """Total number of arms
+
+        Returns:
+          int
+        """
+        return self._K
+
+    @property
+    def T(self):
+        """Number of iterations
+
+        Returns:
+          int
+        """
+        return self._T
+
+    @property
+    def iteration(self):
+        """Current iteration
+
+        Returns:
+          int
+        """
+        return self._iteration
+
+    @property
+    def overall_regret(self):
+        """Total regret of the policy
+
+        Returns:
+          float
+        """
+        return np.sum(self._regret)
+
+    @property
+    def regret(self):
+        """Regret for each round
+
+        Returns:
+          float[]
+        """
+        return self._regret
+
+    @property
+    def cum_regret(self):
+        """Cumulated regret over the rounds
+
+        Returns:
+          float[]
+        """
+        return np.cumsum(self._regret)
+
+    @property
+    def average_regret(self):
+        """Average regret over the rounds
+
+        Returns:
+          float
+        """
+        return np.mean(self._regret)
+
+    def run(self):
+        """Picks each iteration L of K arms. Receives the reward for the picked
+        arms. Adjusts the picking strategy.
+        """
+        for _ in range(0, self._T):
+            self._pick_arms()
+            self._learn()
+            self._regret[self._iteration] = np.sort(self._reward_df.values[self._iteration, :])[-self._L:].sum() \
+                - (self._reward_df.values[self._iteration, self._picked_arms_indicies]).sum()
+            self._iteration += 1
+
+    def _set_information_about_hosts(self, control_host):
+        self._hosts_for_arm = np.zeros(2 * self._K, dtype=object)
+
+        for i, arm in enumerate(self._arms):
+            self._hosts_for_arm[2 * i], self._hosts_for_arm[2 *
+                                                            i + 1] = extract_hosts_from_arm(arm)
+
+        self._hosts_for_arm = self._hosts_for_arm.reshape(-1, 2)
+
+        self._arm_lays_on_same_host = self._hosts_for_arm[:,
+                                                          0] == self._hosts_for_arm[:, 1]
+        self._arm_lays_on_control_host = np.logical_or(
+            self._hosts_for_arm[:, 0] == control_host, self._hosts_for_arm
+            [:, 1] == control_host)
+        self._indicies_of_arms_that_will_not_be_explored = np.arange(
+            self._K)[list(map(lambda arm: 'load.cpucore' in arm, self._arms))]
+
+    @abstractmethod
+    def _pick_arms(self):
+        """Picks arms for the current round and saves them to self._picked_arms"""
+        return
+
+    @abstractmethod
+    def _learn(self):
+        """Improve the policy by adjusting the picking strategy"""
+        return
+
+    @property
+    @abstractmethod
+    def name(self):
+        """Returns the name of the bandit
+
+        Returns:
+          string
+        """
+        return
+
+
+class RandomPolicy(AbstractBandit):
+    """Policy that picks arms randomly."""
+
+    def __init__(self, L, reward_df, random_seed, identifier=None):
+        """Constructs the random policy.
+
+        Args:
+          random_seed (int): Seed for the PRNG
+        """
+        super().__init__(L, reward_df, identifier)
+        self._rnd = np.random.RandomState(random_seed)
+
+    @property
+    def name(self):
+        if self._identifier is not None:
+            return self._identifier
+
+        return 'random'
+
+    def _pick_arms(self):
+        self._picked_arms_indicies = self._rnd.choice(
+            self._K, self._L, replace=False)
+
+
+class EGreedy(AbstractBandit):
+    """E-Greedy bandit algorithm that picks the arms with highest expected
+    reward greedily with probability 1-e (exploitation) and random arms with
+    probablity e (exploration).
+
+    Attributes:
+      epsilon (float): Probability of exploration
+    """
+
+    def __init__(self, L, reward_df, random_seed, epsilon, identifier=None):
+        """Constrcuts the E-Greedy bandit algorithm.
+
+        Args:
+          random_seed (int): Seed for the PRNG
+          epsilon (float): Probability of exploration
+        """
+        super().__init__(L, reward_df, identifier)
+        self._epsilon = epsilon
+        self._expected_values = np.ones(self._K)
+        self._num_plays = np.zeros(self._K)
+        self._rnd = np.random.RandomState(random_seed)
+
+    @property
+    def epsilon(self):
+        return self._epsilon
+
+    @property
+    def name(self):
+        if self._identifier is not None:
+            return self._identifier
+
+        if self._epsilon != 0:
+            return str(self._epsilon) + '-greedy'
+
+        return 'greedy'
+
+    def _pick_arms(self):
+        """Picks arms. Performs an exploration step with probability epsilon
+        and an exploitation step with probability 1-epsilon.
+        """
+        if self._epsilon > self._rnd.rand():
+            self.explore_arms()
+        else:
+            self._picked_arms_indicies = np.argsort(
+                self._expected_values)[-self._L:]
+
+    def explore_arms(self):
+        self._picked_arms_indicies = self._rnd.choice(
+            self._K, self._L, replace=False)
+
+    def _learn(self):
+        """Learns from the reward for the picked arms. Updates the empirical
+        expected value for the arms.
+        """
+        self._expected_values[self._picked_arms_indicies] = (
+            self._expected_values[self._picked_arms_indicies]
+            * self._num_plays[self._picked_arms_indicies]
+            + self._reward_df.values[self._iteration, self._picked_arms_indicies]
+        ) / (self._num_plays[self._picked_arms_indicies] + 1)
+        self._num_plays[self._picked_arms_indicies] += 1
+
+
 class DKEGreedy(EGreedy):
     """E-Greedy bandit algorithm using domain knowledge to set the initial
-    expected reward.
+    expected reward and exclude arms from exploration. Initial reward of arms
+    that lay on the same host or between the control host and a compute host
+    will receive a higher initial expected value than the other arms.
     """
 
-    def __init__(self, L, K, seed, epsilon, arms):
+    def __init__(
+            self, L, reward_df, random_seed, epsilon, init_ev_likely_arms,
+            init_ev_unlikely_arms, control_host, identifier=None):
         """Constructs the Domain Knowledge Epsilon-Greedy Algorithm.
-        Args:
-          L (int): Number of arms to pick each round
-          K (int): Number of total arms
-          seed (int): Seed for the random generator
-          epsilon (float): Epsilon parameter of the algorithm. The Algorithm
-          performs an exploitation step with probability 1-epsilon and an
-          exploration step with probability epsilon.
-          arms (string[]): Name of the arms. Used to initialize the expected
-          value.
-        """
-        super().__init__(L, K, seed, epsilon)
-        self._init_ev(arms)
 
-    def _init_ev(self, arms):
+        Args:
+          control_host (string): Name of the control host
+          init_ev_likely_arms (float): During initialization of the expected
+          values, arms on the same host and arms between control host and
+          compute hosts receive this value as initial expected value.
+          init_ev_unlikely_arms (float): The other arms will receive this value
+          as intial expected value.
+        """
+        super().__init__(L, reward_df, random_seed, epsilon, identifier)
+        super()._set_information_about_hosts(control_host)
+        self._init_ev_likely_arms = init_ev_likely_arms
+        self._init_ev_unlikely_arms = init_ev_unlikely_arms
+        self._init_ev()
+        self._indicies_of_arms_that_will_be_explored = np.delete(
+            np.arange(self._K), self._indicies_of_arms_that_will_not_be_explored)
+
+    def _init_ev(self):
         """Intializes the expected value for the arms. An arm is a pair of
         metrics. If the metrics are on the same host or are a pair between a
-        computing and the control host the expected value is set 1, otherwise
-        to 0.
+        computing and the control host the expected value is set to
+        self._init_ev_likely_arms, otherwise to self._init_ev_unlikely_arms.
+        The ev of arms that will not be explored is set to 0.
         """
-        for i, arm in enumerate(arms):
-            if 'load.cpucore' in arm:
-                self._expected_values[i] = 0
-            host_metrics = arm.split('-')
-            host1, host2 = host_metrics[0][0:8], host_metrics[1][0:8]
+        expected_values = np.where(
+            np.logical_or(
+                self._arm_lays_on_same_host, self._arm_lays_on_control_host),
+            self._init_ev_likely_arms, self._init_ev_unlikely_arms)
+        expected_values[self._indicies_of_arms_that_will_not_be_explored] = 0.0
+        self._expected_values = expected_values
 
-            if host1 not in ('wally113', host2):
-                self._expected_values[i] = 0.25
+    def explore_arms(self):
+        """Performs an exploration step but never exploration arms that we know
+        are uninteresting (arms for the metric load.cpucore because this has a
+        static value).
+        """
+        explore_arm_indicies = self._rnd.choice(
+            self._indicies_of_arms_that_will_be_explored, self._L, replace=False)
+        self._picked_arms_indicies = explore_arm_indicies
 
-    def get_name(self):
+    @property
+    def name(self):
+        if self._identifier is not None:
+            return self._identifier
+
         if self._epsilon != 0:
-            return str(self._epsilon) + '-dkgreedy'
-        return 'dkgreedy'
+            return '%.1f/%.1f-dk-%.1f-greedy' % (self._init_ev_likely_arms,
+                                                 self._init_ev_unlikely_arms,
+                                                 self._epsilon)
+
+        return '%.1f/%.1f-dkgreedy' % (
+            self._init_ev_likely_arms, self._init_ev_unlikely_arms)
 
 
-class CDKEGreedy(AbstractContextualBandit):
+class CDKEGreedy(DKEGreedy):
     """E-Greedy bandit algorithm using domain knowledge to initially push more
     likely arms and using dynamic pushes based on the context to further
-    improve picking of arms. The expected context csv file contains a boolean
-    for each arms that says whether or not to push the arm.
+    improve picking of arms. The context contains the number of events per
+    host.
     """
 
-    def __init__(self, L, K, seed, epsilon, alpha, arms, q):
+    def __init__(
+            self, L, reward_df, random_seed, epsilon, init_ev_likely_arms,
+            init_ev_unlikely_arms, control_host, context_df, push,
+            max_number_pushes, push_kind='plus', identifier=None):
         """Constructs the Domain Knowledge Epsilon-Greedy Algorithm.
 
         Args:
-          L (int): Number of arms to pick each round
-          K (int): Number of total arms
-          seed (int): Seed for the random generator
-          epsilon (float): Epsilon parameter of the algorithm. The Algorithm
-          performs an exploitation step with probability 1-epsilon and an
-          exploration step with probability epsilon.
-          alpha (float): Factor for pushing arms. Multiplies alpha with the
-          expected value of a pushed arm.
-          arms (string[]): Name of the arms. Used to initialize the expected
-          value of the DKEgreedy algorithm.
-          q (int): Number of allowed pushes for an arm
+          context_df (DataFrame): DataFrame containing the number of events per
+          host (columns) and iterations (rows).
+          push (float): Push that gets performed for active arms.
+          max_number_pushes (int): Number of times an arm will be pushed.
+          push_kind (string): One of 'plus' or 'multiply'
         """
-        super().__init__(L, K)
-        self._epsilon_greedy = DKEGreedy(L, K, seed, epsilon, arms)
-        self._no_pushed = K * [0]
-        self._alpha = alpha
-        self._q = q
+        super().__init__(L, reward_df, random_seed, epsilon, init_ev_likely_arms,
+                         init_ev_unlikely_arms, control_host, identifier=identifier)
+        self._context_df = context_df
+        self._no_pushed = np.zeros(self._K)
+        self._push = push
+        self._max_number_pushes = max_number_pushes
+        self._push_kind = push_kind
 
-    def pick_arms(self, context):
+    def pick_arms(self):
         """Pushes the arms with the context. Uses the underlying DKEgreedy
         algorithm to pick the arms.
         """
-        for i, push in enumerate(context):
-            push = bool(push)
-            if push and self._no_pushed[i] < self._q:
-                self._epsilon_greedy.multiply_expected_value(i, self._alpha)
-                self._no_pushed[i] += 1
-        self._epsilon_greedy.pick_arms()
+        if self._epsilon > self._rnd.rand():
+            self.explore_arms()
+        else:
+            self._push_and_pick_arms()
 
-    def get_name(self):
-        """Returns the name of the bandit algorithm.
+    def _push_and_pick_arms(self):
+        current_context = self._context_df.values[self._iteration, :]
 
-        Returns:
-          string: The name
-        """
-        return str(self._alpha) + '-cdk-' + self._epsilon_greedy.get_name() + '-' + str(self._q)
+        first_host_active = current_context[self._hosts_for_arm[:, 0]] > 0
+        second_host_active = current_context[self._hosts_for_arm[:, 1]] > 0
 
-    def learn(self, reward, max_reward):
-        """The underlying non contextual bandit algorithm learns with the
-        provided reward.
+        arm_gets_pushed = np.logical_and(
+            np.logical_or(
+                first_host_active.values, second_host_active.values),
+            self._no_pushed < self._max_number_pushes)
 
-        Args:
-          reward (float[]): Reward for the picked arms.
-          max_reward (float): Used to compute and store the regret of the
-          iteration.
-        """
-        self._epsilon_greedy.learn(reward, max_reward)
-        self._iteration += 1
+        if self._push_kind == 'plus':
+            pushed_expected_values = self._expected_values + \
+                (self._push * arm_gets_pushed)
+        else:
+            factors = np.where(arm_gets_pushed, self._push, 1)
+            pushed_expected_values *= factors
 
-    def get_regret(self):
-        """Returns the regret for the iterations.
+        self._picked_arms_indicies = np.argsort(
+            pushed_expected_values)[-self._L:]
 
-        Returns:
-          float[]: Regret for each of the iterations.
-        """
-        return self._epsilon_greedy.get_regret()
+        self._no_pushed[self._picked_arms_indicies] += arm_gets_pushed[self._picked_arms_indicies]
 
-    def get_picked_arms(self):
-        """Returns the indicies of the recently picked arms.
+    @property
+    def name(self):
+        if self._identifier is not None:
+            return self._identifier
 
-        Returns:
-          int[]: The indicies of the picked arms.
-        """
-        return self._epsilon_greedy.get_picked_arms()
+        return '%s-c%.1f/%d_%s' % (
+            self._push_kind, self._push, self._max_number_pushes, super().name)
 
 
 class MPTS(AbstractBandit):
@@ -280,48 +420,44 @@ class MPTS(AbstractBandit):
     picked if they are likely to yield high rewards.
     """
 
-    def __init__(self, L, K, seed):
+    def __init__(self, L, reward_df, random_seed, identifier=None):
         """Constructs the MPTS policy.
 
         Args:
-          L (int): Number of arms to pick each round
-          K (int): Number of total arms
-          seed (int): Seed for pseudo random generator
+          random_seed (int): Seed for PRNG
         """
-        super().__init__(L, K)
-        self.rnd = np.random.RandomState(seed)
-        self._alpha = [0] * self._K
-        self._beta = [0] * self._K
-        self._num_plays = [0] * self._K
-        self._sum_plays = [0] * self._K
+        super().__init__(L, reward_df, identifier)
+        self.rnd = np.random.RandomState(random_seed)
+        self._alpha = np.zeros(self._K)
+        self._beta = np.zeros(self._K)
+        self._num_plays = np.zeros(self._K)
+        self._sum_plays = np.zeros(self._K)
 
-    def get_name(self):
+    @property
+    def name(self):
+        if self._identifier is not None:
+            return self._identifier
+
         return 'mpts'
 
-    def pick_arms(self):
+    def _pick_arms(self):
         """For each arm a random value gets drawn according to its beta
         distribution. The arms that have the highest L random values get
-        picked.
+        picked. Some arms never get explored.
         """
-        theta = [0] * self._K
-        for i in range(self._K):
-            theta[i] = self.rnd.beta(self._alpha[i] + 1, self._beta[i] + 1)
+        theta = np.random.beta(self._alpha + 1, self._beta + 1)
+        self._picked_arms_indicies = np.argsort(theta)[-self._L:]
 
-        self._picked_arms = np.argsort(theta)[-self._L:]
-
-    def learn(self, reward, max_reward):
+    def _learn(self):
         """Beta distribution gets updated based on the reward. If reward is
         good alpha gets incremented, if reward is bad beta gets incremented.
         """
-        for posrew, iarm in enumerate(self._picked_arms):
-            reward_for_arm = reward[posrew]
-            self._alpha[iarm] = self._alpha[iarm] + reward_for_arm
-            self._beta[iarm] = self._beta[iarm] + (1-reward_for_arm)
-            self._num_plays[iarm] += 1
-            self._sum_plays[iarm] += reward_for_arm
-
-        self._iteration += 1
-        self._regret.append(max_reward - sum(reward))
+        reward_this_round = self._reward_df.values[self._iteration,
+                                                   self._picked_arms_indicies]
+        self._alpha[self._picked_arms_indicies] += reward_this_round
+        self._beta[self._picked_arms_indicies] += 1 - reward_this_round
+        self._num_plays[self._picked_arms_indicies] += 1
+        self._sum_plays[self._picked_arms_indicies] = + reward_this_round
 
 
 class PushMPTS(MPTS):
@@ -330,321 +466,209 @@ class PushMPTS(MPTS):
     Arms that lie within the same host or lie between a computing and the
     control host get a push in the prior (making them more likely to be
     picked). Other arms get a push in the posterior (making them less likely to
-    be picked). Additionally arms containing the 'load.cpucore' metrics get
-    push in the posterior as well (this metric is constant, therefore not
-    interesting).
+    be picked). Additionally arms containing the 'load.cpucore' metrics will
+    never be picked.
     """
 
-    def __init__(self, L, K, seed, arms, push):
-        super().__init__(L, K, seed)
-        self._push = push
-        self._alpha = self._compute_init_prior(arms)
-        self._beta = self._compute_init_posterior(arms)
+    def __init__(self, L, reward_df, random_seed, push_likely_arms,
+                 push_unlikely_arms, control_host, identifier=None):
+        """Constructs the Push Mpts algorithm.
 
-    def _compute_init_prior(self, arms):
+        Args:
+          random_seed (int): Seed for the PRNG
+          push_likely_arms (float): Likely arms get this value as push in the
+          initial prior distribution.
+          push_unlikely_arms (float): Unlikely arms get this value as push in
+          the initial posterior distribution.
+          control_host (string): Name of the control host
+        """
+        super().__init__(L, reward_df, random_seed, identifier)
+        super()._set_information_about_hosts(control_host)
+
+        self._push_likely_arms = push_likely_arms
+        self._push_unlikely_arms = push_unlikely_arms
+
+        self._alpha = self._compute_init_prior()
+        self._beta = self._compute_init_posterior()
+
+    def _compute_init_prior(self):
         """Computes the init prior distribution (alpha) for the arms.
         Arms that lie on the same host or between the control host and
         computing hosts get a puhs.
 
-        Args:
-          arms (string[]): Name of the arms
-
         Returns:
           float[]: Prior distribution
         """
-        init_prior = len(arms) * [0]
-        for i, arm in enumerate(arms):
-            host1, host2 = extract_hosts_from_arm(arm)
+        return np.repeat(float(self._push_likely_arms),
+                         self._K) * np.logical_or(self._arm_lays_on_same_host,
+                                                  self._arm_lays_on_control_host)
 
-            if host1 == host2 or host1 == 'wally113' or host2 == 'wally113':
-                init_prior[i] += self._push
-
-        return init_prior
-
-    def _compute_init_posterior(self, arms):
+    def _compute_init_posterior(self):
         """Computes the posterior distribution (beta) for the arms.
         Arms that don't get a push in the prior get a push in the posterior.
-
-        Args:
-          arms (string[]): Name of the arms
 
         Returns:
           float[]: Posterior distribution
         """
-        init_posterior = len(arms) * [0]
-        for i, arm in enumerate(arms):
-            host1, host2 = extract_hosts_from_arm(arm)
+        return np.repeat(float(self._push_unlikely_arms),
+                         self._K) * (self._compute_init_prior() == 0)
 
-            if host1 not in ('wally113', host2):
-                init_posterior[i] = self._push
+    @property
+    def name(self):
+        if self._identifier is not None:
+            return self._identifier
 
-            if 'load.cpucore' in arm:
-                init_posterior[i] = self._push
+        return '%.1f-%.1f-push-mpts' % (
+            self._push_likely_arms, self._push_unlikely_arms)
 
-        return init_posterior
-
-    def push_prior(self, i, push):
-        """Pushes the prior distribution of arm i.
-
-        Args:
-          i (int): Index of the arm
-          push (float): Value of the push
+    def _pick_arms(self):
+        """For each arm a random value gets drawn according to its beta
+        distribution. The arms that have the highest L random values get
+        picked.
         """
-        self._alpha[i] += push
-
-    def push_posterior(self, i, push):
-        """Pushes the posterior distribution of arm i.
-
-        Args:
-          i (int): Index of the arm
-          push (float): Value of the push
-        """
-        self._beta[i] += push
-
-    def get_name(self):
-        return 'push-' + str(self._push) + 'mpts'
+        theta = np.random.beta(self._alpha + 1, self._beta + 1)
+        theta[self._indicies_of_arms_that_will_not_be_explored] = 0.0
+        self._picked_arms_indicies = np.argsort(theta)[-self._L:]
 
 
-class CPushMpts(AbstractContextualBandit):
+class CPushMpts(PushMPTS):
     """MPTS bandit algorithm using domain knowledge to initially push more
     likely arms and using dynamic pushes based on the context to further
     improve picking of arms. The expected context csv file contains a boolean
     for each arms that says whether or not to push the arm.
     """
 
-    def __init__(self, L, K, seed, push, cpush, arms, q):
+    def __init__(self, L, reward_df, random_seed, push_likely_arms,
+                 push_unlikely_arms, control_host, context_df, cpush,
+                 max_number_pushes, identifier=None):
         """Constructs the contextual push MPTS algorithm.
 
         Args:
-          L (int): Number of arms to pick each iteration.
-          K (int): Number of total arms
-          seed (int): Seed for pseudo random number generator.
-          push (float): Value for the initial static push using domain
-          knowledge.
-          cpush (float): Value of the dynamic push
-          arms (string[]): Names of the arms
-          q (int): Allowed pushes per arm
+          context_df (DataFrame): Context that contains the number of events
+          per host (columns) and iterations (rows).
+          cpush (float): Push for active arms
+          max_number_pushes (int): Number of times an arm gets pushed
         """
-        super().__init__(L, K)
-        self._push_mpts = PushMPTS(L, K, seed, arms, push)
+        super().__init__(L, reward_df, random_seed, push_likely_arms,
+                         push_unlikely_arms, control_host, identifier)
+        self._context_df = context_df
         self._cpush = cpush
-        self._q = q
-        self._no_pushed = K * [0]
+        self._max_number_pushes = max_number_pushes
+        self._no_pushed = np.zeros(self._K)
 
-    def pick_arms(self, context):
+    def _pick_arms(self):
         """Pushes the arms with the context. Uses the underlying PushMPTS
         algorithm to pick the arms.
         """
-        for i, push in enumerate(context):
-            push = bool(push)
-            if self._no_pushed[i] < self._q:
-                if push:
-                    self._push_mpts.push_prior(i, self._cpush)
-                else:
-                    self._push_mpts.push_posterior(i, self._cpush)
-                self._no_pushed[i] += 1
-            self._push_mpts.pick_arms()
+        current_context = self._context_df.loc[self._context_df.index
+                                               [self._iteration]]
 
-    def learn(self, reward, max_reward):
-        """The underlying non contextual bandit algorithm learns with the
-        provided reward.
+        first_host_active = current_context[self._hosts_for_arm[:, 0]] > 0
+        second_host_active = current_context[self._hosts_for_arm[:, 1]] > 0
 
-        Args:
-          reward (float[]): Reward for the picked arms.
-          max_reward (float): Used to compute and store the regret of the
-          iteration.
-        """
-        self._push_mpts.learn(reward, max_reward)
-        self._iteration += 1
+        arm_gets_pushed = np.logical_and(
+            np.logical_or(
+                first_host_active.values, second_host_active.values),
+            self._no_pushed < self._max_number_pushes)
 
-    def get_regret(self):
-        """Returns the regret for the iterations.
+        alpha_pushed = self._alpha + arm_gets_pushed * self._cpush
 
-        Returns:
-          float[]: Regret for each of the iterations.
-        """
-        return self._push_mpts.get_regret()
+        theta = np.random.beta(alpha_pushed + 1, self._beta + 1)
+        theta[self._indicies_of_arms_that_will_not_be_explored] = 0.0
+        self._picked_arms_indicies = np.argsort(theta)[-self._L:]
 
-    def get_picked_arms(self):
-        """Returns the indicies of the recently picked arms.
+        self._no_pushed[self._picked_arms_indicies] += arm_gets_pushed[self._picked_arms_indicies]
 
-        Returns:
-          int[]: The indicies of the picked arms.
-        """
-        return self._push_mpts.get_picked_arms()
-
-    def get_name(self):
+    @property
+    def name(self):
         """Returns the name of the bandit algorithm.
 
         Returns:
           string: The name
         """
-        return str(self._cpush) + '-cpush-' + self._push_mpts.get_name()
+        if self._identifier is not None:
+            return self._identifier
+
+        return 'c%1.f/%d_%s' % (self._cpush, self._max_number_pushes,
+                                super().name)
 
 
-class ContextualBandit(AbstractContextualBandit):
-    """Provides functionality for a contextual bandit algorithm. A contextual
-    bandit algorithm receives a context each round that is used, to pick arms.
-    The contextual bandit maintains a set of policies on how to pick arms.
-    Further it maintains a mapper that maps the context to a policy, that is
-    used to pick arms.
-
-    Attributes:
-      _L (int): Number of arms to select in each round
-      _K (int): Number of total arms
-      _policies (AbstractBandit[]): Non-contextual policies that pick arms
-      _mapper (AbstractMapper): Mapper to map context to policy
-      _context (float[][]): Contexts received in each iteration
-      _selected_policy_index_over_time (int[]): Indicies of the policies used
-      to pick arms each round.
+class EGreedyCB(AbstractBandit):
+    """Epsilon Greedy Contextual Bandit baseline algorithm from the
+    contextualbandits package.
     """
 
-    def __init__(self, L, K, policies, mapper):
-        """Intializes a ContextualBandit policy.
+    def __init__(
+            self, L, reward_df, context_df, random_seed, epsilon,
+            batch_size=20, identifier='', max_iter=100):
+        super().__init__(L, reward_df)
+        self._identifier = identifier
+        self._context_df = context_df
+        base_algorithm = LogisticRegression(
+            solver='lbfgs', warm_start=True, max_iter=max_iter)
+        self._rnd = np.random.RandomState(random_seed)
+        self._epsilon_greedy = EpsilonGreedy(
+            base_algorithm, nchoices=self._K, random_state=random_seed,
+            explore_prob=epsilon)
+        self._scaler = StandardScaler()
+        self._batch_size = batch_size
+        self._picked_arms = np.zeros(batch_size * L).reshape(-1, L)
+        self._received_rewards = np.zeros(batch_size * L).reshape(-1, L)
 
-        Args:
-          L (int): Arms to select each round
-          K (int): Total number of arms
-          policies (AbstractBandit[]): Non-contextual policies
-          mapper ()
-        """
-        super().__init__(L, K)
-        self._policies = policies
-        self._selected_policy_index_over_time = []
-        self._mapper = mapper
-        self._context = []
-
-    def pick_arms(self, context):
-        """Picks arms based on the context
-
-        Args:
-          context (float[]): Vector of features
-        """
-        self._context.append(context)
-        if len(self._context) > 1:
-            policy_index = self._mapper.get_mapping(
-                self._context[-2] - self._context[-1])
+    def _pick_arms(self):
+        # Picks for the next batch size
+        if self._iteration <= self._batch_size:  # model not fitted yet, pick random arms
+            random_arm_indicies = self._rnd.choice(
+                self._K, size=self._L, replace=False)
+            self._picked_arms_indicies = random_arm_indicies
         else:
-            policy_index = randrange(len(self._policies))
-        self._selected_policy_index_over_time.append(policy_index)
-        self._policies[policy_index].pick_arms()
-        self._picked_arms = self._policies[policy_index].get_picked_arms()
+            self._picked_arms_indicies = (
+                self._epsilon_greedy.topN(
+                    self._context_df.values[self._iteration, :],
+                    self._L)[0])
 
-    def learn(self, reward, max_reward):
-        self._regret.append(max_reward - sum(reward))
-        self._iteration += 1
-        self._policies[self._selected_policy_index_over_time[-1]
-                       ].learn(reward, max_reward)
+        self._picked_arms[self._iteration %
+                          self._batch_size, :] = self._picked_arms_indicies
+        self._received_rewards[self._iteration % self._batch_size,
+                               :] = self._reward_df.values[self._iteration, self._picked_arms_indicies]
 
-    def get_name(self):
-        return 'scb-' + self._mapper.get_name()
+    def _learn(self):
+        # (re)fit model
+        if self._iteration > 0 and self._iteration % self._batch_size == 0:
+            if self._iteration == self._batch_size:
+                self._scaler.fit(self._context_df.values[:self._batch_size, :])
+                self._epsilon_greedy.fit(
+                    repeat_entry_L_times(
+                        self._scaler.transform(
+                            self._context_df.values
+                            [: self._batch_size, :]),
+                        self._L),
+                    self._picked_arms.flatten(),
+                    self._received_rewards.flatten())
+            else:
+                self._epsilon_greedy.fit(
+                    repeat_entry_L_times(
+                        self._scaler.transform(
+                            self._context_df.values
+                            [self._iteration - self._batch_size: self.
+                             _iteration, :]),
+                        self._L),
+                    self._picked_arms.flatten(),
+                    self._received_rewards.flatten(),
+                    warm_start=True)
 
-    def get_selected_policy_index(self):
-        """Returns
-        """
-        return self._selected_policy_index_over_time
+            self._picked_arms = np.zeros(
+                self._batch_size * self._L).reshape(-1, self._L)
+            self._received_rewards = np.zeros(
+                self._batch_size * self._L).reshape(-1, self._L)
 
+    @property
+    def name(self):
+        if self._identifier != '':
+            return self._identifier
 
-class AbstractMapper(ABC):
-    """Base class for mappers that map context to policies.
+        if self._epsilon_greedy.explore_prob == 0.0:
+            return 'cb-greedy-%d' % self._batch_size
 
-    Methods:
-    -------
-    get_mapping(context)
-        Returns the index of the policy for the current context.
-    """
-    @abstractmethod
-    def get_mapping(self, context):
-        """Returns the index of the policy that shall be used to pick arms
-        based on the current context.
-
-        Args:
-          context (float[]): Vector describing the context
-
-        Returns
-          int: Index of the policy that will be used for picking arms
-        """
-        return
-
-    @abstractmethod
-    def get_name(self):
-        """Returns name of the mapper
-
-        Returns:
-          string: Name of the mapper
-        """
-
-
-class MostFrequentMapper(AbstractMapper):
-    """For each possible feature this mapper returns the most frequent occuring
-    in the context. Therefore the contextual bandit needs as many policies as
-    features.
-    """
-
-    def __init__(self, number_of_features):
-        """Constructs a MostFrequentMapper
-
-        Args:
-          number_of_features (int): Number of features the context has
-        """
-        self.mapping = list(range(len(number_of_features)))
-
-    def get_mapping(self, context):
-        return self.mapping[np.argmax(list(context.values))]
-
-    def get_size_of_mapping(self):
-        """Returns the number of policies the mapper maps to.
-        """
-        return len(self.mapping)
-
-    def get_name(self):
-        return 'most-frequent-mapper'
-
-
-class KMeansMapper(AbstractMapper):
-    """Uses a clustering of a sample of contexts. A newly arriving context is
-    clustered and mapped to the policy associated with the cluster.
-    """
-
-    def __init__(self, context_df, k, sample_size, rnd_state=0):
-        """Constructs a KMeansMapper
-
-        Args:
-          context_df (DataFrame): DataFrame containing all the contexts
-          k (int): Parameter K for the KMeans algorithm
-          sample_size (flaot): Percentage of contexts in DataFrame that will be
-          used to build the cluster.
-          rnd_state (int): Seed for random generator
-        """
-        features_sample = self._get_feature_samples(context_df, sample_size)
-        self.k = k
-        self.kmeans = KMeans(
-            n_clusters=k, random_state=rnd_state).fit(features_sample)
-
-    def get_mapping(self, context):
-        return self.kmeans.predict(context.values.reshape(1, -1))[0]
-
-    def get_name(self):
-        return str(self.k) + 'means-mapper'
-
-    def _get_feature_samples(self, context_df, sample_size):
-        """Extracts the samples from the context DataFrame by subtracting two
-        consecutive contexts.
-
-        Args:
-          context_df (DataFrame): DataFrame containing all the contexts
-          sample_size (float): Percentage of contexts that will be used from
-          the DataFrame
-
-        Returns:
-          float[][]: Array of contexts that will be used for clustering.
-        """
-        samples = []
-        sample_indicies = sample(
-            range(1, len(context_df.index) - 1), sample_size)
-
-        for current_index in sample_indicies:
-            samples.append(
-                context_df.loc[current_index + 1] - context_df.loc[current_index])
-
-        return samples
+        return 'cb-%f-greedy-%d' % (
+            self._epsilon_greedy.explore_prob, self._batch_size)

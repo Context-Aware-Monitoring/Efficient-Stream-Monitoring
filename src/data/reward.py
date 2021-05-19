@@ -1,24 +1,21 @@
 """Generates rewards csv files for a bandit algorithm.
 """
-from datetime import datetime, timedelta
+from os.path import dirname, abspath
 import pandas as pd
 import numpy as np
-from sklearn.metrics import mutual_info_score
 
-corr_methods = {
-    'MI': lambda window, arms: _calculate_mutual_information_for_window_df(window, arms),
-    'pear': lambda window, arms: _calculate_pearson_coefficient_for_window_df(window, arms)
-}
+DATA_DIR = '%s/data' % dirname(dirname(dirname(abspath(__file__))))
+REWARDS_DIR = '%s/processed/rewards' % DATA_DIR
+EXPERIMENT_CONFIG_DIR = '%s/interim/experiment_configs' % DATA_DIR
 
 
 def generate_reward_csv(
-        metrics_file_paths,
+        hosts,
         window_size=30,
         step=5,
-        corr='MI',
-        normalize=True,
+        correlation_method='pearson',
         sequential=True,
-        outdir='../../data/processed/',
+        outdir=REWARDS_DIR,
         kind='continous',
         **kwargs
 ):
@@ -26,82 +23,119 @@ def generate_reward_csv(
     algorithm.
 
     Args:
-      metrics_file_paths (string[]): Metrics files that are used to compute the
-      reward.
+      hosts (string[]): Hosts used for the computation of the reward csv file.
+      Possible values are wally113, wally117, wally122, wally123, wally124.
       window_size (int): For the calculation of the reward function a sliding
       window is used. window_size specifies the size of this sliding window.
       step (int): Specifies the step of the sliding window.
-      corr (string): Specifies the measure of correlation used to compute the
+      correlation_method (string): Specifies the measure of correlation used to compute the
       correlation between metrics. Available options are 'MI'.
-      normalize (bool): Weather or not to normalize the reward.
+      sequential (bool): Specifies whether the metrics for sequential or
+      concurrent program execution should be used.
       outdir (string): Specifies the directory where to write the generated
       file.
-
-    Returns:
-      String: Filepath of the generated file.
+      kind (string): One of 'continous', 'threshold' or 'top'. Specifies how
+      the rewards will be computed. 'Continous' is a continous reward, where
+      the reward for each arm is the correlation, 'top' and 'threshold' are
+      binary rewards where 'top' rewards a 1 if the arm is one of the top L
+      correlated arms and 'threshold' rewards a 1 if the arms correlation
+      exceeds a threshold.
+      kwargs (dict): The following parameters can be passed: L (int) for kind
+      'top' and threshold (float) for kind 'threshold'.
     """
-    unified_metrics_df = _generate_unified_metrics_dataframe(
-        metrics_file_paths)
+    unified_metrics_df = _generate_unified_metrics_dataframe(hosts, sequential)
 
     reward_df = _generate_windowed_reward_df(
         unified_metrics_df,
         window_size,
         step,
-        corr,
+        correlation_method,
         kind,
         **kwargs
     )
 
-    if normalize:
-        _normalize_reward_df(reward_df)
 
+    filepath = _generate_filepath(
+        window_size, step, correlation_method, sequential, outdir, kind, **kwargs)
+
+    reward_df.to_csv(filepath, index=True)
+
+
+def _generate_filepath(
+        window_size, step, correlation_method, sequential, outdir, kind, **
+        kwargs):
+    """Computes a filepath for the reward csv file that allows us to identify
+    the properties of the experiment.
+
+    Args:
+      window_size (int): Size of the sliding window
+      step (int): Step of the sliding window
+      correlation_method (string): One of 'pearson',
+      sequential (bool): If the experiment is for the sequential or concurrent
+      metrics data.
+      outdir (string): Directory where to write the csv file
+      kind (string): One of 'continous', 'top' or 'threshold'
+
+    Returns:
+      string: The filepath of the reward csv file
+    """
     seq_or_con = 'seq' if sequential else 'con'
     if kind == 'top':
         kind += '_' + str(kwargs['L'])
     elif kind == 'threshold':
         kind += '_' + str(kwargs['threshold'])
-    filepath = ("%s%s_rewards_w%d_s%d_%s_n%d_%s.csv" %
-                (outdir, seq_or_con, window_size, step, corr, normalize, kind))
-    reward_df.to_csv(filepath, index=False)
-
-    print('Wrote file %s' % filepath)
+    filepath = (
+        "%s%s_rewards_w%d_s%d_%s_%s.csv" %
+        (outdir, seq_or_con, window_size, step, correlation_method, kind))
 
     return filepath
 
 
-def convert_now_column_to_datetime(dataframe):
-    """Converts the now column in the DataFrame to a datetime object.
+def _read_host_df(host, seq=True):
+    """Reads the metrics data for the host and returns a DataFrame.
 
     Args:
-      df (DataFrame): DataFrame containing a now column
+      host (str): Hostname, one of wally113, wally117, wally122, wally123,
+      wally124
+      seq (bool): If sequential or concurrent metrics should be read
 
+    Returns:
+      DataFrame: Containing all the metrics as columns
     """
-    def ts_to_datetime(ts): return datetime.strptime(
-        ts.split(' CEST')[0], '%Y-%m-%d %H:%M:%S')
-    dataframe['now'] = dataframe['now'].apply(ts_to_datetime)
+    filepath = ''
+    if seq:
+        filepath = '%s/interim/sequential_data/metrics/%s_metrics.csv' % (DATA_DIR, host)
+    else:
+        filepath = '%s/interim/concurrent_data/metrics/%s_metrics_concurrent.csv' % (DATA_DIR, host)
+
+    metrics_df = pd.read_csv(
+        filepath,
+        dtype={'now': str, 'load.cpucore': np.float64, 'load.min1': np.float64,
+               'load.min5': np.float64, 'load.min15': np.float64,
+               'mem.used': np.float64})
+
+    metrics_df['now'] = pd.to_datetime(metrics_df['now'])
+    metrics_df = metrics_df.set_index('now')
+
+    metrics_df = metrics_df.add_prefix('%s.' % host)
+
+    return metrics_df.pivot_table(metrics_df, index=['now'], aggfunc='mean')
 
 
-def _generate_unified_metrics_dataframe(paths):
-    """Generates a unified data frame containing all the individual metrics csv
-    files passed as a parameter.
+def _generate_unified_metrics_dataframe(hosts, seq):
+    """Generates a unified data frame for the metrics of all the hosts that are
+    passed as a parameter.
 
     Args:
-      path (string): Path to folder containing individual csv files of metrics
+      hosts (string[]): Contains all the hosts. Possible values are wally113,
+      wally117, wally122, wally123, wally124.
+      seq (bool): Weather seequential or concurrent metrics data is read.
+
     Returns:
       DataFrame containing the metrics for all hosts
     """
-    hostnames = [x.split('/')[-1].split('_')[0] for x in paths]
-    hosts_df = [None] * len(hostnames)
 
-    i = 0
-    for i, current_path in enumerate(paths):
-        metrics_df = pd.read_csv(current_path)
-        convert_now_column_to_datetime(metrics_df)
-        metrics_df = metrics_df.set_index('now')
-        hosts_df[i] = pd.pivot_table(metrics_df, index=['now'], aggfunc='mean')
-
-        hosts_df[i].columns = list(
-            map(lambda x: hostnames[i] + '.' + x, hosts_df[i].columns.values))
+    hosts_df = [_read_host_df(host, seq) for host in hosts]
 
     unified_df = hosts_df[0]
 
@@ -112,147 +146,119 @@ def _generate_unified_metrics_dataframe(paths):
     return unified_df
 
 
+def _compute_pairwise_correlation_of_arms(
+        metrics_df, window_size, window_step, method):
+    """Computes a DataFrame that contains the correlation for arms (pairs
+    of metrics) as columns and the iterations as rows.
+
+    Args:
+      metrics_df (DataFrame): A DataFrame that contains the metrics as columns
+      and the iteration as rows.
+      window_size (int): Size of the sliding window
+      window_step (int): Step of the sliding window
+      method (string): One of 'pearson',
+
+    Returns:
+      DataFrame: Containing the correlation for the arms as columns and a row
+      for each iteration.
+    """
+    start = metrics_df.index.values[0]
+    # skip the windows that contain nan values because the window size hasn't
+    # reached the desired window size
+    start = start + np.timedelta64(window_size - 1, 's')
+    end = metrics_df.index.values[-1]
+
+    arm_names = metrics_df.columns.values
+    no_arms = len(arm_names)
+    indicies_for_new_df = pd.date_range(start, end, freq='%dS' % window_step)
+    no_windows = len(indicies_for_new_df)
+    values_in_window = no_arms * no_arms
+
+    correlation_matrix = metrics_df.rolling(
+        window=window_size).corr().values.flatten()
+    # first window_size - 1 values are NaN because the sliding window is not yet full
+    correlation_matrix = correlation_matrix[values_in_window *
+                                            (window_size - 1):]
+
+    indicies_of_relevant_windows = np.array(
+        [np.arange(offset, offset + values_in_window)
+         for offset in range(
+             0, correlation_matrix.shape[0],
+             values_in_window * window_step)]).flatten()
+    correlation_matrix = correlation_matrix[indicies_of_relevant_windows]
+
+    indicies_arms_access_order = np.array(
+        [tuple([i, j])
+         for i in range(len(arm_names)) for j in range(len(arm_names))
+         if i < j])
+    column_names_reward_df = list(map(
+        lambda x: arm_names[x[0]] + '-' + arm_names[x[1]], indicies_arms_access_order))
+
+    # the correlation matrix is a quadratic symetric matrix, we will access the
+    # top half above the diagonal to get the values for the pairwise
+    # correlation of the arms
+    access_top_of_diagonal = np.array([i < j
+                                       for i in range(len(arm_names))
+                                       for j in range(len(arm_names))])
+
+    return pd.DataFrame(
+        data=correlation_matrix
+        [np.tile(access_top_of_diagonal, no_windows)].reshape(
+            -1, len(column_names_reward_df)),
+        columns=column_names_reward_df,
+        index=indicies_for_new_df)
+
+
 def _generate_windowed_reward_df(
         unified_metrics_df,
         window_size,
         step,
-        corr,
+        correlation_method,
         kind='continous',
         **kwargs
 ):
-    """
-    Generated a DataFrame for the rewards based on the passed dataframe
-    containing the metrics data.
-    For each pair of columns in the metrics DataFrame a column in the reward
-    DataFrame will be created, representing an arm.
-    The columnes will be aggregated using a sliding window approach.
+    """Computes the DataFrame that contains the reward for each arm as columns
+    and a row for each iteration.
 
     Args:
-      unified_metrics_df (DataFrame): DataFrame where the columns represent a
-      metric and the rows represent a timestamp.
+      unified_metrics_df (DataFrame): A DataFrame that contains the value of
+      metrics as columns and a row for each iteration.
       window_size (int): Size of the sliding window
-      step (int): Step of the sliding window
-      corr (string): Measure of correlation that is used. Possible options are:
-      'MI'
-      kind: Specify how the reward is computed.
-      Options:
-        continuos: Just reward the measure of correlation
-        top: A binary reward, 1 if arm is one of L highest correlated arms, 0
-        if not. L is passed in **kwargs.
-        threshold: A binary reward is rewarded for arms whose correlation
-        exceeds a threshold. The threshold is passed in **kwargs.
+      window_step (int): Step of the sliding window
+      correlation_method (string): Method use to compute the correlation for
+      arms. One of 'pearson',
+      kind (string): Type of reward function. One of 'continous', 'top' or
+      'threshold'. Continous takes the correlation for arms as reward. Top
+      computes a binary reward, where an arm gets an 1 if it is one of the
+      top L highest correlated arms this iteration. L is passed in the kwargs.
+      Threshold computes a binary reward where an arm gets a 1 if its
+      correlation exceeds a certain threshold. The threshold is passed in the
+      kwargs.
+      **kwargs (dict): Possible keys are 'L' or 'threshold'.
 
     Returns:
-      DataFrame: An empty DataFrame where each column represents an arm.
+      DataFrame: The DataFrame where columns contain the reward for arms and
+      rows the iterations.
+
     """
-    arms = []
-    for i, column1 in enumerate(unified_metrics_df.columns):
-        for j, column2 in enumerate(unified_metrics_df.columns):
-            if i == j or j < i:
-                continue
-            # please dont change -, gets split later based on this
-            arms.append(column1 + '-' + column2)
+    reward_df = _compute_pairwise_correlation_of_arms(
+        unified_metrics_df, window_size, step, correlation_method)
+    reward_df = reward_df.abs().replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
-    reward_df = pd.DataFrame(columns=arms)
+    if kind == 'continous':
+        return reward_df
+    if kind == 'top':
+        L = kwargs['L']
+        L_highest_vals = np.sort(reward_df.values)[:, -L]
+        highest_vals_ndarray = np.repeat(
+            L_highest_vals, reward_df.shape[1]).reshape(-1, reward_df.shape[1])
+        transformed_values = (
+            reward_df.values >= highest_vals_ndarray).astype(int)
+    elif kind == 'threshold':
+        threshold = kwargs['threshold']
+        transformed_values = (reward_df.values >= threshold).astype(int)
 
-    i = 0
-    cur = unified_metrics_df.index[0]
-    end = unified_metrics_df.index[-1]
-    timedelta_window = timedelta(seconds=window_size - 1)
-
-    while (cur + timedelta_window) <= end:
-        window = unified_metrics_df.loc[pd.date_range(
-            start=cur, end=(cur + timedelta_window), freq='1S')]
-        correlation_for_arms = corr_methods[corr](window, arms)
-        if kind == 'continous':
-            reward_df.loc[i] = correlation_for_arms
-        elif kind == 'threshold':
-            threshold = kwargs['threshold']
-            reward_df.loc[i] = list(
-                map(lambda cv: cv >= threshold, correlation_for_arms))
-        elif kind == 'top':
-            L = kwargs['L']
-            Lhighest_value = sorted(correlation_for_arms)[-L]
-            reward_df.loc[i] = list(
-                map(lambda cv: cv >= Lhighest_value, correlation_for_arms))
-        i += 1
-        cur += timedelta(seconds=step)
-
+    reward_df = pd.DataFrame(
+        columns=reward_df.columns, index=reward_df.index,
+        data=transformed_values)
     return reward_df
-
-
-def _normalize_reward_df(reward_df):
-    """
-    Normalizes the reward DataFrame using the min-max normalization.
-
-    Args:
-      reward_df (DataFrame): DataFrame containing the measure of correlation
-      for each arm and timestamp.
-    """
-    # if normalize:
-    #     xmax = max(reward_df.max())
-    #     xmin = min(reward_df.min())
-
-    #     norm = lambda x : (x - xmin) / (xmax - xmin)
-    #     reward_df = reward_df.apply(norm)
-    row_min = 0
-    row_max = 0
-    for i in reward_df.index:
-        row_max = reward_df.loc[i].max()
-        row_min = reward_df.loc[i].min()
-
-        def norm(cell_value):
-            return (cell_value-row_min) / (row_max-row_min)
-        reward_df.loc[i] = reward_df.loc[i].apply(norm)
-
-
-def _calculate_mutual_information_for_window_df(window_df, arms):
-    """Computes the pairwise mutual information for the arms (pairs of metrics)
-    in the window_df dataframe.
-
-    Args:
-      window_df (DataFrame): DataFrame containing the metrics values for each
-      arm.
-      arms (string[]): Array of strings representing the arms (pairs of
-      metrics).
-      An arm is represented by the string representation metric1-metric2.
-
-    Returns
-      Float[]: The mutual information for the arms.
-    """
-    reward = [0] * len(arms)
-
-    for i, column_name in enumerate(arms):
-        individual_columns = column_name.split('-')
-        mutual_information = mutual_info_score(
-            window_df[individual_columns[0]], window_df[individual_columns[1]]
-        )
-        reward[i] = mutual_information
-
-    return reward
-
-
-def _calculate_pearson_coefficient_for_window_df(window_df, arms):
-    """Computes the pairwise absolute pearson coefficient for the arms (pairs
-    of metrics) in the window_df dataframe.
-
-    Args:
-      window_df (DataFrame): DataFrame containing the metrics values for each
-      arm.
-      arms (string[]): Array of strings representing the arms (pairs of
-      metrics).
-      An arm is represented by the string representation metric1-metric2.
-
-    Returns
-      Float[]: The absolute of the pearson correlation for the arms.
-    """
-    reward = [0] * len(arms)
-    for i, column_name in enumerate(arms):
-        individual_columns = column_name.split('-')
-        correlation_matrix = np.corrcoef(
-            window_df[individual_columns[0]], window_df[individual_columns[1]]
-        )
-        reward[i] = 0.0 if np.isnan(correlation_matrix[0][1]) else abs(
-            correlation_matrix[0][1])
-
-    return reward

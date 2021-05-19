@@ -1,11 +1,17 @@
-.PHONY: make_directories setup_environment
+.PHONY: make_directories
 make_directories:
 	mkdir -p data/raw
-	mkdir -p data/interim
-	mkdir -p data/processed
-	mkdir -p data/external
+	mkdir -p data/interim/experiment_configs
+	mkdir -p data/processed/experiment_results
+	mkdir -p data/processed/rewards/continous
+	mkdir -p data/processed/rewards/top
+	mkdir -p data/processed/rewards/threshold
+	mkdir -p data/processed/context
+
 data: make_directories
-	unzip -q concurrent_data.zip -d data/raw
+	unzip -q concurrent\ data.zip -d data/raw
 	mv data/raw/concurrent\ data data/raw/concurrent_data
 	unzip -q sequential_data.zip -d data/raw
-	cd src/data && python3 make_dataset.py --all
+	python3 src/data/make_dataset.py --all
+	python3 src/features/build_features.py --context
+
