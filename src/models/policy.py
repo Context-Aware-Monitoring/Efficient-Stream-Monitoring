@@ -530,7 +530,6 @@ class PushMPTS(MPTS):
         theta[self._indicies_of_arms_that_will_not_be_explored] = 0.0
         self._picked_arms_indicies = np.argsort(theta)[-self._L:]
 
-
 class CPushMpts(PushMPTS):
     """MPTS bandit algorithm using domain knowledge to initially push more
     likely arms and using dynamic pushes based on the context to further
@@ -672,3 +671,36 @@ class EGreedyCB(AbstractBandit):
 
         return 'cb-%f-greedy-%d' % (
             self._epsilon_greedy.explore_prob, self._batch_size)
+
+
+class InvertedPushMPTS(PushMPTS):
+    """Policy that simulates wrong domain knowledge by inverting the pushes.
+    Likely arms get a push in the posterior, while unlikely arms get a push in
+    the prior.
+    """
+
+    def __init__(self, L, reward_df, random_seed, push_likely_arms,
+             push_unlikely_arms, control_host, identifier=None):
+        """Constructs the Inverted Push Mpts algorithm.
+
+        Args:
+          random_seed (int): Seed for the PRNG
+          push_likely_arms (float): Likely arms get this value as push in the
+          initial prior distribution.
+          push_unlikely_arms (float): Unlikely arms get this value as push in
+          the initial posterior distribution.
+          control_host (string): Name of the control host
+        """
+        super().__init__(L, reward_df, random_seed, push_likely_arms,
+                         push_unlikely_arms, control_host, identifier)
+
+        self._alpha = self._compute_init_posterior()
+        self._beta = self._compute_init_prior()
+
+    @property
+    def name(self):
+        if self._identifier is not None:
+            return self._identifier
+
+        return '%.1f-%.1f-inverted-push-mpts' % (
+            self._push_likely_arms, self._push_unlikely_arms)
