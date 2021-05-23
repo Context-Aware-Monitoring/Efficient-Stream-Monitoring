@@ -1,7 +1,6 @@
 """This class contains different policies on how to select pairs of metrics.
 It contains both contextual and non-contextual policies.
 """
-
 from abc import ABC, abstractmethod
 import numpy as np
 from sklearn.linear_model import LogisticRegression
@@ -427,7 +426,7 @@ class MPTS(AbstractBandit):
           random_seed (int): Seed for PRNG
         """
         super().__init__(L, reward_df, identifier)
-        self.rnd = np.random.RandomState(random_seed)
+        self._rnd = np.random.RandomState(random_seed)
         self._alpha = np.zeros(self._K)
         self._beta = np.zeros(self._K)
         self._num_plays = np.zeros(self._K)
@@ -445,7 +444,7 @@ class MPTS(AbstractBandit):
         distribution. The arms that have the highest L random values get
         picked. Some arms never get explored.
         """
-        theta = np.random.beta(self._alpha + 1, self._beta + 1)
+        theta = self._rnd.beta(self._alpha + 1, self._beta + 1)
         self._picked_arms_indicies = np.argsort(theta)[-self._L:]
 
     def _learn(self):
@@ -526,7 +525,7 @@ class PushMPTS(MPTS):
         distribution. The arms that have the highest L random values get
         picked.
         """
-        theta = np.random.beta(self._alpha + 1, self._beta + 1)
+        theta = self._rnd.beta(self._alpha + 1, self._beta + 1)
         theta[self._indicies_of_arms_that_will_not_be_explored] = 0.0
         self._picked_arms_indicies = np.argsort(theta)[-self._L:]
 
@@ -572,7 +571,7 @@ class CPushMpts(PushMPTS):
 
         alpha_pushed = self._alpha + arm_gets_pushed * self._cpush
 
-        theta = np.random.beta(alpha_pushed + 1, self._beta + 1)
+        theta = self._rnd.beta(alpha_pushed + 1, self._beta + 1)
         theta[self._indicies_of_arms_that_will_not_be_explored] = 0.0
         self._picked_arms_indicies = np.argsort(theta)[-self._L:]
 
