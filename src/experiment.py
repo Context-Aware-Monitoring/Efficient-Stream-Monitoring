@@ -1,23 +1,37 @@
-from models.policy import RandomPolicy, MPTS, PushMPTS, AbstractContextualBandit, EGreedy, DKEGreedy, CDKEGreedy, CPushMpts
-import numpy as np
-from matplotlib import pyplot as plt
-import pandas as pd
-import yaml
-from random import seed, random, randint
-import time
-from datetime import datetime
+"""Groups multiple policies and runs them on the same reward csv file and L.
+"""
 import sys
-sys.path.append("./pre_processing")
+from os.path import dirname, abspath
+import logging
+import time
+from random import seed, randint
+from datetime import datetime
+import yaml
+import numpy as np
+import pandas as pd
+from models.policy import RandomPolicy, EGreedy, MPTS, DKEGreedy, PushMPTS\
+    , CPushMpts, CDKEGreedy, EGreedyCB, InvertedPushMPTS
+
+DATA_DIR = '%s/data' % dirname(dirname(abspath(__file__)))
+SERIALIZATION_DIR = '%s/processed/experiment_results/' % DATA_DIR
+
+logging.basicConfig(filename='experiments.log',
+                    encoding='utf-8', level=logging.INFO)
+
+def _get_now_as_string():
+    now = datetime.now()
+
+    return now.strftime("%d.%m.%Y %H:%M:%S")
 
 
-LOWER_BOUND_SAMPLE_SIZE_KMEANS = 10
-
-
-def _read_epsilon_from_config(config):
-    if bool(config.get('epsilon')):
-        return config['epsilon']
-
-    return 0.0
+def _read_context_from_config(config):
+    """Checks if the current configuration of a policy contains a the path
+    to a context csv file. If so it gets appended to self._context,
+    otherwise an error gets thrown and the program gets terminated.
+    """
+    if 'context_path' not in config:
+        return None
+    return pd.read_csv(config['context_path'], index_col=0)
 
 
 def get_cross_validated_policies(config_for_policy, params):
@@ -55,6 +69,25 @@ def get_cross_validated_policies(config_for_policy, params):
     return policies
 
 
+def print_information_about_experiment(experiment):
+    """Prints textual information about the experiment.
+
+    Args:
+      experiment (Experiment): Run experiment containing the results
+    """
+    no_policies = len(experiment.average_regret.keys())
+    print('Experiment: Pick %d arms out of %d' %
+          (experiment.L, experiment.K))
+    print('A total of %d different policies were evaluated' % no_policies)
+    i = 1
+
+    for pol_name in experiment.average_cum_regret.keys():
+        total_average_cum_regret = experiment.average_cum_regret[pol_name][-1]
+        print('%d. %s, total regret: %f' %
+              (i, pol_name, total_average_cum_regret))
+        i += 1
+
+
 class Experiment:
     """Performs an experiment where multiple different policies are run and
     can be compared against each other. The configuration for the experiment is
@@ -71,6 +104,7 @@ class Experiment:
     _context (float[][]): Contains the context for each of the policies. Context
     is a vector of floats.
     _seed (int): Seed for random generator
+    _number_of_runs (int): Number of runs for each policy
     Methods:
     ________
     run():
@@ -82,7 +116,8 @@ class Experiment:
         for iteration t.
     """
 
-    def __init__(self, config_path=None, additional_config={}):
+    def __init__(
+            self, config_path=None, additional_config={}, runs=3):
         """Constructs the Experiment instance from the passed yaml file.
         Further configurations can be direcly passed too.
 
@@ -90,37 +125,45 @@ class Experiment:
           config_path (string): Path to a yaml config file
           additional_config (dict): Additional configuration
         """
+        self._experiment_name = None
+        if config_path is not None and additional_config == {}:
+            self._experiment_name = config_path.split('/')[-1].split('.')[0]
+
         config = additional_config
         if config_path is not None:
             with open(config_path) as yml_file:
                 config = config | yaml.safe_load(yml_file)
 
+        self._L = config['L']
+        self._number_of_runs = runs
+
         if config.get('reward_path') is None:
             sys.exit('Config file does not containg reward csv file')
 
         filepath_rewards = config['reward_path']
-        self._reward_df = pd.read_csv(filepath_rewards)
+        self._reward_df = pd.read_csv(filepath_rewards, index_col=0)
+
         self._K = len(self._reward_df.columns)
         self._T = len(self._reward_df.index)
-        self._L = config['L']
 
-        self._policies = []
-        self._context = []
+        if config.get('kind') is not None and config['kind'] == 'top':
+            self._reward_df.loc[:] = self._reward_df.values >= np.sort(
+                self._reward_df.values, axis=1)[:, -self._L].reshape(-1, 1)
+        elif config.get('kind') is not None and config['kind'] == 'threshold':
+            self._reward_df.loc[:] = self._reward_df.values >= config['threshold']
+
+        self._policies = [[] for _ in range(runs)]
 
         self._seed = config.get('seed')
         if self._seed is not None:
             seed(self._seed)
 
+        self._number_policies = len(config['policies'])
         self._create_policies(config)
+        self._config = config
 
-    def _read_context_from_config(self, config):
-        """Checks if the current configuration of a policy contains a the path
-        to a context csv file. If so it gets appended to self._context,
-        otherwise an error gets thrown and the program gets terminated.
-        """
-        if 'context_path' not in config:
-            sys.exit('Missing context_path in config')
-        self._context.append(pd.read_csv(config['context_path'], header=None))
+        self._average_regret = {}
+        self._average_cum_regret = {}
 
     def _create_policies(self, config):
         """Creates the policies based on the configuration and adds them to
@@ -129,71 +172,236 @@ class Experiment:
         Args:
           config (string): Path to a yaml config file
         """
-        for config_for_policy in config['policies']:
-            name = config_for_policy['name']
+        for current_run in range(self._number_of_runs):
+            for config_for_policy in config['policies']:
+                name = config_for_policy['name']
+                if name == 'random':
+                    self._policies[current_run].append(
+                        self._create_random_policy(config_for_policy))
+                elif name == 'mpts':
+                    self._policies[current_run].append(
+                        self._create_mpts(config_for_policy))
+                elif name in ('egreedy', 'greedy'):
+                    self._policies[current_run].append(
+                        self._create_epsilon_greedy(config_for_policy))
+                elif name == 'push-mpts':
+                    self._policies[current_run].append(
+                        self._create_push_mpts(config_for_policy))
+                elif name == 'inverted-push-mpts':
+                    self._policies[current_run].append(
+                        self._create_inverted_push_mpts(config_for_policy))
+                elif name == 'dkgreedy':
+                    self._policies[current_run].append(
+                        self._create_dkegreedy_policy(config_for_policy))
+                elif name == 'cdkegreedy':
+                    self._policies[current_run].append(
+                        self._create_cdkegreedy_policy(config_for_policy))
+                elif name == 'cpush-mpts':
+                    self._policies[current_run].append(
+                        self._create_cpush_mpts(config_for_policy))
+                elif name == 'cb-egreedy':
+                    self._policies[current_run].append(
+                        self._create_contextual_egreedy(config_for_policy))
 
-            if name == 'random':
-                self._policies.append(RandomPolicy(
-                    self._L, self._K, randint(0, 10000)))
-                self._context.append(None)
-            elif name == 'mpts':
-                self._policies.append(
-                    MPTS(self._L, self._K, randint(0, 10000)))
-                self._context.append(None)
-            elif name == 'greedy':
-                self._policies.append(
-                    EGreedy(self._L, self._K, randint(0, 10000), 0))
-                self._context.append(None)
-            elif name == 'egreedy':
-                self._policies.append(EGreedy(self._L, self._K, randint(
-                    0, 10000), _read_epsilon_from_config(config_for_policy)))
-                self._context.append(None)
-            elif name == 'push-mpts':
-                push = config_for_policy['push']
-                self._policies.append(PushMPTS(self._L, self._K, randint(
-                    0, 10000), self._reward_df.columns.values, push))
-                self._context.append(None)
-            elif name == 'dkgreedy':
-                self._policies.append(DKEGreedy(self._L, self._K, randint(
-                    0, 10000), _read_epsilon_from_config(config_for_policy), self._reward_df.columns.values))
-                self._context.append(None)
-            elif name == 'cdkegreedy':
-                self._read_context_from_config(config_for_policy)
-                self._policies.append(CDKEGreedy(self._L, self._K, randint(0, 10000), _read_epsilon_from_config(
-                    config_for_policy), config_for_policy['alpha'], self._reward_df.columns.values, config_for_policy['q']))
-            elif name == 'cpush-mpts':
-                self._read_context_from_config(config_for_policy)
-                self._policies.append(CPushMpts(self._L, self._K, randint(
-                    0, 10000), config_for_policy['push'], config_for_policy['cpush'], self._reward_df.columns.values, config_for_policy['q']))
+    def _create_random_policy(self, config_for_policy):
+        seed = randint(0, 10000)
+        identifier = config_for_policy.get('identifier')
+
+        return RandomPolicy(self._L, self._reward_df, seed,
+                            identifier=identifier)
+
+    def _create_mpts(self, config_for_policy):
+        seed = randint(0, 10000)
+        identifier = config_for_policy.get('identifier', None)
+
+        return MPTS(self._L, self._reward_df, seed, identifier=identifier)
+
+    def _create_push_mpts(self, config_for_policy):
+        seed = randint(0, 10000)
+        push_likely_arms = config_for_policy.get('push_likely_arms', 1.0)
+        push_unlikely_arms = config_for_policy.get('push_unlikely_arms', 1.0)
+        control_host = config_for_policy.get('control_host', 'wally113')
+        identifier = config_for_policy.get('identifier', None)
+
+        return PushMPTS(
+            self._L, self._reward_df, seed, push_likely_arms,
+            push_unlikely_arms, control_host, identifier=identifier)
+    
+    def _create_inverted_push_mpts(self, config_for_policy):
+        seed = randint(0, 10000)
+        push_likely_arms = config_for_policy.get('push_likely_arms', 1.0)
+        push_unlikely_arms = config_for_policy.get('push_unlikely_arms', 1.0)
+        control_host = config_for_policy.get('control_host', 'wally113')
+        identifier = config_for_policy.get('identifier', None)
+
+        return InvertedPushMPTS(
+            self._L, self._reward_df, seed, push_likely_arms,
+            push_unlikely_arms, control_host, identifier=identifier)    
+
+    def _create_cpush_mpts(self, config_for_policy):
+        seed = randint(0, 10000)
+        push_likely_arms = config_for_policy.get('push_likely_arms', 1.0)
+        push_unlikely_arms = config_for_policy.get('push_unlikely_arms', 1.0)
+        control_host = config_for_policy.get('control_host', 'wally113')
+        context_df = _read_context_from_config(config_for_policy)
+        cpush = config_for_policy.get('cpush', 1.0)
+        max_number_pushes = config_for_policy.get('max_number_pushes', 10)
+        identifier = config_for_policy.get('identifier', None)
+
+        return CPushMpts(
+            self._L, self._reward_df, seed, push_likely_arms,
+            push_unlikely_arms, control_host, context_df, cpush,
+            max_number_pushes, identifier)
+
+    def _create_epsilon_greedy(self, config_for_policy):
+        seed = randint(0, 10000)
+        epsilon = config_for_policy.get('epsilon', 0.0)
+        identifier = config_for_policy.get('identifier', None)
+
+        return EGreedy(self._L, self._reward_df, seed, epsilon,
+                       identifier=identifier)
+
+    def _create_dkegreedy_policy(self, config_for_policy):
+        seed = randint(0, 10000)
+        epsilon = config_for_policy.get('epsilon', 0.0)
+        init_ev_likely_arms = config_for_policy.get('init_ev_likely_arms', 1.0)
+        init_ev_unlikely_arms = config_for_policy.get(
+            'init_ev_unlikely_arms', 1.0)
+        control_host = config_for_policy.get('control_host', 'wally113')
+        identifier = config_for_policy.get('identifier', None)
+
+        return DKEGreedy(self._L, self._reward_df, seed, epsilon,
+                         init_ev_likely_arms, init_ev_unlikely_arms,
+                         control_host, identifier=identifier)
+
+    def _create_cdkegreedy_policy(self, config_for_policy):
+        seed = randint(0, 10000)
+        epsilon = config_for_policy.get('epsilon', 0.0)
+        init_ev_likely_arms = config_for_policy.get('init_ev_likely_arms', 1.0)
+        init_ev_unlikely_arms = config_for_policy.get(
+            'init_ev_unlikely_arms', 1.0)
+        control_host = config_for_policy.get('control_host', 'wally113')
+        context_df = _read_context_from_config(config_for_policy)
+        push = config_for_policy.get('push', 0.1)
+        max_number_pushes = config_for_policy.get('max_number_pushes', 10)
+        push_kind = config_for_policy.get('push_kind', 'plus')
+        identifier = config_for_policy.get('identifier', None)
+
+        return CDKEGreedy(
+            self._L, self._reward_df, seed, epsilon, init_ev_likely_arms,
+            init_ev_unlikely_arms, control_host, context_df, push,
+            max_number_pushes, push_kind, identifier=identifier)
+
+    def _create_contextual_egreedy(self, config_for_policy):
+        context_df = _read_context_from_config(config_for_policy)
+
+        if context_df is None:
+            context_df = pd.DataFrame(data=np.zeros(
+                len(self._reward_df.index.values)))
+
+        seed = randint(0, 10000)
+        epsilon = config_for_policy.get('epsilon', 0.0)
+        batch_size = config_for_policy.get('batch_size', 50)
+        identifier = config_for_policy.get('identifier', None)
+        max_iter = config_for_policy.get('max_iter', 100)
+
+        return EGreedyCB(
+            self._L, self._reward_df, context_df, seed, epsilon, batch_size,
+            identifier, max_iter)
+
+    def serialize_results(self):
+        """Write the results of the experiment into the config and stores the
+        regret of the policies in csv files. Writes both to the
+        SERIALIZATION_DIR.
+        """
+        yaml_file = ''
+        if self._experiment_name is not None:
+            experiment_id = self._experiment_name
+            yaml_file = '%s%s_results.yml' % (
+                SERIALIZATION_DIR, self._experiment_name)
+        else:
+            experiment_id = str(time.time())
+            yaml_file = '%sexperiment%s_config.yml' % (
+                SERIALIZATION_DIR, experiment_id)
+
+        cum_regret_csv_file = '%scum_regret_experiment_%s.csv' % (
+            SERIALIZATION_DIR,
+            experiment_id)
+        average_regret_csv_file = '%saverage_regret_experiment_%s.csv' % (
+            SERIALIZATION_DIR,
+            experiment_id)
+
+        cum_regret_df = pd.DataFrame(data=self._average_cum_regret)
+        average_regret_df = pd.DataFrame(data=self._average_regret)
+
+        cum_regret_df.to_csv(cum_regret_csv_file)
+        average_regret_df.to_csv(average_regret_csv_file)
+        with open(yaml_file, 'w') as outfile:
+            self._config |= {
+                'results':
+                            {
+                                policy_name:
+                                float(
+                                    "{:.2f}".format(
+                                        average_cum_regret_for_policy[-1]))
+                                for policy_name,
+                                average_cum_regret_for_policy
+                                in self._average_cum_regret.items()},
+                'cum_regret_csv_file': cum_regret_csv_file,
+                'average_regret_csv_file': average_regret_csv_file}
+            yaml.dump(self._config, outfile, default_flow_style=False)
 
     def run(self):
         """Performs the experiment. In each of T iterations the policies pick
         L arms and afterwards receive the reward for their choices and the
         maximaliy obtainable reward.
         """
-        for i, pol in enumerate(self._policies):
-            regret_over_time = [0] * self._T
-            total_regret = 0
+        if self._experiment_name is not None:
+            logging.info(
+                '%s: Started experiment %s' %
+                (self._experiment_name, _get_now_as_string()))
+        for current_run in range(self._number_of_runs):
+            for i, pol in enumerate(self._policies[current_run]):
+                pol.run()
 
-            for t in range(self._T):
-                if isinstance(pol, AbstractContextualBandit):
-                    pol.pick_arms(self._context[i].loc[t])
-                else:
-                    pol.pick_arms()
+        for i, pol in enumerate(self._policies[0]):
+            total_regret = pol.regret
+            total_cum_regret = pol.cum_regret
 
-                picked_arms = pol.get_picked_arms()
-                max_reward = sum(sorted(self._reward_df.loc[t])[-self._L:])
+            if self._number_of_runs >= 2:
+                for j in range(self._number_of_runs-1):
+                    total_regret = [
+                        x + y for x,
+                        y in zip(
+                            total_regret, self._policies[j + 1][i].regret)]
+                    total_cum_regret = [
+                        x+y for x, y in zip(total_cum_regret, self._policies[j+1][i].cum_regret)]
 
-                reward_for_arms = self._reward_df.loc[t][self._reward_df.columns.values[picked_arms]]
-                pol.learn(reward_for_arms, max_reward)
+            self._average_regret[pol.name] = [
+                x / self._number_of_runs for x in total_regret]
+            self._average_cum_regret[pol.name] = [
+                x / self._number_of_runs for x in total_cum_regret]
 
-    def get_policies(self):
-        """Getter for _policies
+        ordered_policies = sorted(
+            self._average_cum_regret.keys(),
+            key=lambda pol_name: self._average_cum_regret[pol_name][-1])
 
-        Returns:
-          AbstractBandit[]: Policies of the experiment
-        """
-        return self._policies
+        ordered_average_regret = {}
+        ordered_average_cum_regret = {}
+
+        for pol_name in ordered_policies:
+            ordered_average_regret[pol_name] = self._average_regret[pol_name]
+            ordered_average_cum_regret[pol_name] = self._average_cum_regret[pol_name]
+
+        self._average_regret = ordered_average_regret
+        self._average_cum_regret = ordered_average_cum_regret
+
+        self.serialize_results()
+
+        if self._experiment_name is not None:
+            logging.info(
+                '%s: Finished experiment %s' %
+                (self._experiment_name, _get_now_as_string()))
 
     def get_top_correlated_arms(self, t, names=False):
         """Returns either the names or index of the top L correlated arms for
@@ -204,142 +412,53 @@ class Experiment:
           names (bool): If true, return names of the arms, otherwise indicies.
         """
         if names:
-            return self._reward_df.columns.values[np.argsort(self._reward_df.loc[t])[-self._L:]]
-        else:
-            return np.argsort(self._reward_df.loc[t])[-self._L:]
+            return self._reward_df.columns.values[np.argsort(
+                self._reward_df.loc
+                [t])[-self._L:]]
 
-    def get_L(self):
-        """Getter for _L
+        return np.argsort(self._reward_df.loc[t])[-self._L:]
+
+    @property
+    def L(self):
+        """Number of arms to pick each iteration
 
         Returns:
-          int: Number of arms to pick each iteration
+          int
         """
         return self._L
 
-    def get_K(self):
-        """Getter for _K
+    @property
+    def K(self):
+        """Number of total arms
 
         Returns:
-          int: Number of total arms
+          int
         """
         return self._K
 
+    @property
+    def T(self):
+        """Number of iterations
 
-def plot_regret_of_policies(experiment):
-    """Plots the regret of the different policies evaluated in the experiment
-    in one figure.
+        Returns:
+          int
+        """
+        return self._T
 
-    Args:
-      experiment (Experiment): Run experiment containing the results that will
-      be plotted.
-    """
-    policies = experiment.get_policies()
-    fig, axs = plt.subplots(len(policies) + 1, 1,
-                            figsize=(15, len(policies) * 7))
-    T = 0
-    for i, p in enumerate(policies):
-        regret = p.get_regret()
-        T = len(regret)
-        axs[i].plot(list(range(T)), regret)
-        axs[i].title.set_text('Regret per round for ' + p.get_name())
-        axs[i].set_ylabel('Regret')
-        axs[i].set_xlabel('Iteration')
-        acc_regret = [0] * T
-        for j in range(T):
-            acc_regret[j] = acc_regret[j-1] + regret[j]
-        axs[len(policies)].plot(list(range(T)), acc_regret, label=p.get_name())
-    axs[len(policies)].legend()
-    axs[len(policies)].set_ylabel('Regret')
-    axs[len(policies)].set_xlabel('Iteration')
-    plt.show()
+    @property
+    def average_regret(self):
+        """Average regret over the runs for the policies.
 
+        Returns:
+          dict (string->float[])
+        """
+        return self._average_regret
 
-def print_information_about_experiment(experiment):
-    """Prints textual information about the experiment.
+    @property
+    def average_cum_regret(self):
+        """Average cummulated regret over the runs for the policies.
 
-    Args:
-      experiment (Experiment): Run experiment containing the results
-    """
-    policies = experiment.get_policies()
-    total_regret = list(map(lambda policy: sum(policy.get_regret()), policies))
-    policy_ranking = np.argsort(
-        list(map(lambda regret: -1 * regret, total_regret)))
-
-    no_policies = len(policies)
-    print('Experiment: Pick %d arms out of %d' %
-          (experiment.get_L(), experiment.get_K()))
-    print('A total of %d different policies were evaluated' % no_policies)
-    for i, policy_index in enumerate(policy_ranking):
-        policy_name = policies[policy_index].get_name()
-        policy_regret = total_regret[policy_index]
-        print('%d. %s, total regret: %f' %
-              (no_policies - i, policy_name, policy_regret))
-
-
-if __name__ == '__main__':
-    # random_regret = Experiment('./experiment_configs/random.yml').run()
-    # mpts_regret = Experiment('./experiment_configs/mpts.yml').run()
-    scb_regret = Experiment('./experiment_configs/scb-mpts.yml').run()
-
-    # fig = plt.figure()
-    # ax = plt.axes()
-
-    # ax.plot(range(len(random_regret)),random_regret,label='random')
-    # ax.plot(range(len(mpts_regret)), mpts_regret, label='mpts')
-    # ax.plot(range(len(scb_regret)), scb_regret, label='scb')
-
-
-def perform_experiment_for_L(config, L, plot=True):
-    """Performs an experiment given a config and L and prints information about
-    the experiment. If desired, outcomes of the experiment get plotted as well.
-
-    Args:
-      config (dict): Configuration of the experiment
-      L (int): Number of arms to pick each iteration.
-      plot (bool): If True outcome of experiment gets plotted.
-    """
-    e = Experiment(additional_config=config | {'L': L})
-    e.run()
-    print_information_about_experiment(e)
-    if plot:
-        plot_regret_of_policies(e)
-
-
-def perform_experiment_for_Ls(config, Ls, plot=True):
-    """Performs the same experiment for different values of L.
-
-    Args:
-      config (dict): Configuration for the experiment
-      Ls (int[]): Different values of L for which the experiment is run.
-      plot (bool): If true, outcome of experiment gets plotted.
-    """
-    for L in Ls:
-        perform_experiment_for_L(config, L, plot)
-
-
-def perform_top_L_experiment_for_L(config, filepath, L, plot=True):
-    """Like perform_experiment_for_L, but adjusts the filepath to load the
-    proper reward file for the experiment based on L.
-
-    Args:
-      config (dict): Configuration for the experiment
-      filepath (string): Filepath with a placeholder %s for L.
-      L (int): Arms to pick in the experiment
-      plot (bool): If true, outcome of experiment gets plotted.
-    """
-    filepath = filepath % str(L)
-    perform_experiment_for_L(config | {'reward_path': filepath}, L, plot)
-
-
-def perform_top_L_experiment_for_Ls(config, filepath, Ls, plot=True):
-    """Like perform_experiment_for_Ls, but adjusts the filepath to load their
-    proper reward file for the experiment based on L.
-
-    Args:
-      config (dict): Configuration for the experiment
-      filepath (string): Filepath with a placeholder %s for L.
-      Ls (int[]): Arms to pick in the experiment
-      plot (bool): If true, outcome of experiment gets plotted.
-    """
-    for L in Ls:
-        perform_top_L_experiment_for_L(config, filepath, L, plot)
+        Returns:
+          dict (string->float[])
+        """
+        return self._average_cum_regret

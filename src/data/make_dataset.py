@@ -8,8 +8,6 @@ import os
 from os.path import dirname, abspath
 import pandas as pd
 import yaml
-
-sys.path.append(dirname(dirname(abspath(__file__))))
 import reward
 
 DATA_DIR = '%s/data' % dirname(dirname(dirname(abspath(__file__))))
@@ -245,6 +243,8 @@ def _generate_experiment_configs():
     _generate_push_mpts_parameter_optimization_experiment_configs()
     _generate_cdkegreedy_parameter_optimization_experiment_configs()
     _generate_cpush_mpts_parameter_optimization_experiment_configs()
+    _generate_dkegreedy_wrong_domainknowledge_configs()
+    _generate_push_mpts_wrong_domainknowledge_configs()
 
 
 def _write_configs_for_policies(policies, name=''):
@@ -292,7 +292,7 @@ def _generate_baseline_experiment_configs():
             'epsilon': 0.1,
             'identifier': 'workload-context-0.1-egreedy',
             'max_iter': 2500,
-            'context_path': DATA_DIR \
+            'context_path': DATA_DIR
             + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv'
         }
     ]
@@ -355,6 +355,40 @@ def _generate_cdkegreedy_parameter_optimization_experiment_configs():
 
     _write_configs_for_policies(
         policies, name='parameter_optimization_cdkegreedy')
+
+
+def _generate_dkegreedy_wrong_domainknowledge_configs():
+    policies = [
+        {'name': 'egreedy', 'epsilon': 0.1},
+        {'name': 'greedy'}
+    ]
+
+    policies.extend(
+        get_cross_validated_policies(
+            {'name': 'dkgreedy'}, {
+                'epsilon': [0, 0.01, 0.05, 0.1, 0.2],
+                'init_ev_likely_arms': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
+                'init_ev_unlikely_arms': [0.8, 0.9, 1.0]
+            }
+        )
+    )
+
+    _write_configs_for_policies(policies, name="dkegreedy_wrong_dk")
+
+
+def _generate_push_mpts_wrong_domainknowledge_configs():
+    policies = [
+        {'name': 'mpts'}
+    ]
+
+    policies.extend(get_cross_validated_policies(
+        {'name': 'inverted-push-mpts'}, {
+            'push_likely_arms': [0.1, 0.5, 1, 2, 5, 10],
+            'push_unlikely_arms': [0.1, 0.5, 1, 2, 5, 10]
+        }))
+
+    _write_configs_for_policies(
+        policies, name='push_mpts_wrong_dk')
 
 
 def _generate_cpush_mpts_parameter_optimization_experiment_configs():
