@@ -6,7 +6,8 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from contextualbandits.online import EpsilonGreedy
-
+import itertools
+import pdb
 
 def repeat_entry_L_times(X, L):
     return np.tile(X, L).reshape(-1, X.shape[1])
@@ -16,8 +17,8 @@ def extract_hosts_from_arm(arm):
     """Arm names have the following format:
     host1.metric1-host2.metric2
 
-    Extracts and returns the name of the two hosts from the arm and returns
-    them. The names of the host might be the same.
+    Extracts and returns the name of the two hosts from the arm them. The names
+    of the host might be the same.
 
     Args:
       arm (string): Name of the arm in format host1.metrics1-host2.metrics2
@@ -30,6 +31,41 @@ def extract_hosts_from_arm(arm):
 
     return host1, host2
 
+def extract_metrics_from_arm(arm):
+    """Arm names have to following format:
+    host1.metric1-host2.metric2
+
+    Extracts and returns the name of the two metrics from the arm.
+
+    Args:
+      arm (string): Name of the arm in format host1.metrics1-host2.metric2
+
+    Returns:
+      (string, string): Names of the hosts
+    """
+    host_metrics = arm.split('-')
+    metrics1, metrics2 = host_metrics[0][9:], host_metrics[1][9:]
+
+    return metrics1, metrics2
+
+def _get_other_arms_replace_single_host(arm, excluded_host, compute_hosts=['wally117','wally122','wally123','wally124']):
+    other_compute_hosts = list(filter(lambda host: host != excluded_host, compute_hosts))
+
+    return [arm.replace(excluded_host, och) for och in other_compute_hosts]
+
+def _get_other_arms_replace_both_hosts(arm, compute_hosts=['wally117','wally122','wally123','wally124']):
+    metric1, metric2 = extract_metrics_from_arm(arm)
+
+    arms = []
+    for h1, h2 in itertools.product(compute_hosts, compute_hosts):
+        arms.append('%s.%s-%s.%s' % (h1,metric1,h2,metric2))
+        if metric1 != metric2:
+            arms.append('%s.%s-%s.%s' % (h1,metric2,h2,metric1))
+
+
+    arms.remove(arm)
+
+    return arms
 
 class AbstractBandit(ABC):
     """Provides functionality for a basic non-contextual bandit.
@@ -169,6 +205,17 @@ class AbstractBandit(ABC):
         self._arm_lays_on_control_host = np.logical_or(
             self._hosts_for_arm[:, 0] == control_host, self._hosts_for_arm
             [:, 1] == control_host)
+
+        self._arm_lays_on_different_compute_hosts = np.logical_and(
+            np.logical_not(self._arm_lays_on_same_host),
+            np.logical_not(self._arm_lays_on_control_host)
+        )
+
+        self._arm_lays_on_same_compute_host = np.logical_and(
+            self._arm_lays_on_same_host,
+            np.logical_not(self._arm_lays_on_control_host)
+        )
+        
         self._indicies_of_arms_that_will_not_be_explored = np.arange(
             self._K)[list(map(lambda arm: 'load.cpucore' in arm, self._arms))]
 
@@ -703,3 +750,96 @@ class InvertedPushMPTS(PushMPTS):
 
         return '%.1f-%.1f-inverted-push-mpts' % (
             self._push_likely_arms, self._push_unlikely_arms)
+
+    
+class NetworkMPTS(MPTS):
+    """Policy where relationships between arms exist. Arms move in groups, and
+    one arms might be related to other arms. Therefore when an arm receives a
+    reward we can derive some knowledge for other arms as well. A graph exists
+    where nodes are the arms and weighted edges (w in [0,1]) indicate the
+    strength of the relationship. If an arm receives a reward r we will push
+    the prior/ posterior of the related arms by w * r.
+    """
+
+    def __init__(self, L, reward_df, random_seed, weight=0.5, control_host='wally113', compute_hosts=['wally117', 'wally122', 'wally123', 'wally124'], identifier=None):
+        """Constructs the NetworkMPTS policy.
+        """
+        super().__init__(L, reward_df, random_seed, identifier)
+        super()._set_information_about_hosts(control_host)
+
+        self._weight = weight
+        self._control_host = control_host
+        self._compute_hosts = compute_hosts
+        self._nodes = reward_df.columns.values
+        self._edges = self._get_edges()
+
+    def _get_edges(self):
+        edges = []
+        for arm in self._nodes:
+            host1,host2 = extract_hosts_from_arm(arm)
+            if host1 == host2:
+                if host1 == self._control_host:
+                    edges.extend(np.zeros(self._nodes.shape[0], dtype=bool))
+                    continue
+                else:
+                    relevant_arms = _get_other_arms_replace_single_host(arm, host1)
+            else:
+                if host1 == self._control_host:
+                    relevant_arms = _get_other_arms_replace_single_host(arm, host2)
+                elif host2 == self._control_host:
+                    relevant_arms = _get_other_arms_replace_single_host(arm, host1)
+                else:
+                    relevant_arms = _get_other_arms_replace_both_hosts(arm)
+            edges.extend(np.isin(self._nodes, relevant_arms))
+
+        return np.array(edges).reshape(self._nodes.shape[0],self._nodes.shape[0])
+
+
+    def _learn(self):
+        """Update beta distribution of picked arms based on the reward. Updates
+        beta distribution of related arms as well if they didn't get picked.
+        Does this by increasing the prior/ posterior by the weighted reward.
+        """
+        super()._learn()
+        number_of_arms = self._nodes.shape[0]
+        
+        neighbors_played_arms = self._edges[self._picked_arms_indicies]
+        arm_number_of_updates = neighbors_played_arms.sum(axis=0)
+        arm_gets_update = arm_number_of_updates > 0
+
+        reshaped_rewards = np.repeat(self._reward_df.values[self._iteration,self._picked_arms_indicies], number_of_arms).reshape(-1, number_of_arms)
+
+        update = (neighbors_played_arms * reshaped_rewards * self._weight).sum(axis=0)[arm_gets_update]
+
+        self._alpha[arm_gets_update] += update
+        self._beta[arm_gets_update] += arm_number_of_updates[arm_gets_update] * self._weight - update
+        
+    @property
+    def name(self):
+        return '%.1f-network-mpts' % self._weight
+
+    
+class RandomNetworkMPTS(NetworkMPTS):
+    def __init__(self, L, reward_df, random_seed, weight=0.5, control_host='wally113', compute_hosts=['wally117', 'wally122', 'wally123', 'wally124'], probability_neighbors=[0.4,0.15,0.15,0.15,0.15], identifier=None):
+        self._probability_neighbors = probability_neighbors
+        super().__init__(L, reward_df, random_seed, weight, control_host, compute_hosts, identifier)
+
+    
+    def _get_edges(self):
+        number_arms = self._nodes.shape[0]
+        edges = []
+        for i,_ in enumerate(self._nodes):
+            number_neighbors = self._rnd.choice(len(self._probability_neighbors), 1, p=self._probability_neighbors)
+            neighbors = np.zeros(number_arms, dtype=bool)
+            neighbors[self._rnd.choice(number_arms, number_neighbors)] = True
+            neighbors[i] = False
+            edges.extend(neighbors)
+
+        return np.array(edges).reshape(number_arms,number_arms)
+
+    @property
+    def name(self):
+        if self._identifier is not None:
+            return self._identifier
+
+        return '%.1f-%s-random-network-mpts' % (self._weight, str(self._probability_neighbors))
