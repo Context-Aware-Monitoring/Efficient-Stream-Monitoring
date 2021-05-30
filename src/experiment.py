@@ -4,13 +4,15 @@ import sys
 from os.path import dirname, abspath
 import logging
 import time
+import argparse
 from random import seed, randint
 from datetime import datetime
 import yaml
 import numpy as np
 import pandas as pd
 from models.policy import RandomPolicy, EGreedy, MPTS, DKEGreedy, PushMPTS\
-    , CPushMpts, CDKEGreedy, EGreedyCB, InvertedPushMPTS
+    , CPushMpts, CDKEGreedy, EGreedyCB, InvertedPushMPTS, StaticNetworkMPTS, RandomNetworkMPTS\
+    , DynamicNetworkMPTS
 
 DATA_DIR = '%s/data' % dirname(dirname(abspath(__file__)))
 SERIALIZATION_DIR = '%s/processed/experiment_results/' % DATA_DIR
@@ -67,6 +69,15 @@ def get_cross_validated_policies(config_for_policy, params):
                 new_config, updated_params))
 
     return policies
+
+def _remove_non_policy_params_from_dict(config: dict):
+    del config['name']
+
+    context_df = _read_context_from_config(config)
+    if context_df is not None:
+        del config['context_path']
+
+    return config
 
 
 def print_information_about_experiment(experiment):
@@ -165,6 +176,10 @@ class Experiment:
         self._average_regret = {}
         self._average_cum_regret = {}
 
+
+
+
+        
     def _create_policies(self, config):
         """Creates the policies based on the configuration and adds them to
         _policies.
@@ -172,143 +187,39 @@ class Experiment:
         Args:
           config (string): Path to a yaml config file
         """
-        for current_run in range(self._number_of_runs):
-            for config_for_policy in config['policies']:
+
+        for config_for_policy in config['policies']:
                 name = config_for_policy['name']
-                if name == 'random':
-                    self._policies[current_run].append(
-                        self._create_random_policy(config_for_policy))
-                elif name == 'mpts':
-                    self._policies[current_run].append(
-                        self._create_mpts(config_for_policy))
-                elif name in ('egreedy', 'greedy'):
-                    self._policies[current_run].append(
-                        self._create_epsilon_greedy(config_for_policy))
-                elif name == 'push-mpts':
-                    self._policies[current_run].append(
-                        self._create_push_mpts(config_for_policy))
-                elif name == 'inverted-push-mpts':
-                    self._policies[current_run].append(
-                        self._create_inverted_push_mpts(config_for_policy))
-                elif name == 'dkgreedy':
-                    self._policies[current_run].append(
-                        self._create_dkegreedy_policy(config_for_policy))
-                elif name == 'cdkegreedy':
-                    self._policies[current_run].append(
-                        self._create_cdkegreedy_policy(config_for_policy))
-                elif name == 'cpush-mpts':
-                    self._policies[current_run].append(
-                        self._create_cpush_mpts(config_for_policy))
-                elif name == 'cb-egreedy':
-                    self._policies[current_run].append(
-                        self._create_contextual_egreedy(config_for_policy))
+                context = _read_context_from_config(config_for_policy)
+                config_for_policy = _remove_non_policy_params_from_dict(config_for_policy)
+                for current_run in range(self._number_of_runs):
+                    if name == 'random':
+                        self._policies[current_run].append(RandomPolicy(self._L, self._reward_df, self._seed, **config_for_policy))
+                    elif name == 'mpts':
+                        self._policies[current_run].append(MPTS(self._L, self._reward_df, self._seed, **config_for_policy))
+                    elif name in ('egreedy', 'greedy'):
+                        self._policies[current_run].append(EGreedy(self._L, self._reward_df, self._seed, **config_for_policy))                    
+                    elif name == 'push-mpts':
+                        self._policies[current_run].append(PushMPTS(self._L, self._reward_df, self._seed, **config_for_policy))                                        
+                    elif name == 'network-mpts':
+                        self._polcies[current_run].append(StaticNetworkMPTS(self._L, self._reward_df, self._seed, **config_for_policy))
+                    elif name == 'dynamic-network-mpts':
+                        self._polcies[current_run].append(DynamicNetworkMPTS(self._L, self._reward_df, self._seed, context, **config_for_policy))
+                    elif name == 'random-network-mpts':
+                        self._polcies[current_run].append(RandomNetworkMPTS(self._L, self._reward_df, self._seed, **config_for_policy))
+                    elif name == 'inverted-push-mpts':
+                        self._policies[current_run].append(InvertedPushMPTS(self._L, self._reward_df, self._seed, **config_for_policy))
+                    elif name == 'dkgreedy':
+                        self._policies[current_run].append(DKEGreedy(self._L, self._reward_df, self._seed, **config_for_policy))
+                    elif name == 'cdkegreedy':
+                        self._policies[current_run].append(CDKEGreedy(self._L, self._reward_df, context, **config_for_policy))
+                    elif name == 'cpush-mpts':
+                        self._policies[current_run].append(CPushMPTS(self._L, self._reward_df, self._seed, context, **config_for_policy))
+                    elif name == 'cb-egreedy':
+                        self._policies[current_run].append(EGreedyCB(self._L, self._reward_df, self._seed, context, **config_for_policy))
 
-    def _create_random_policy(self, config_for_policy):
-        seed = randint(0, 10000)
-        identifier = config_for_policy.get('identifier')
-
-        return RandomPolicy(self._L, self._reward_df, seed,
-                            identifier=identifier)
-
-    def _create_mpts(self, config_for_policy):
-        seed = randint(0, 10000)
-        identifier = config_for_policy.get('identifier', None)
-
-        return MPTS(self._L, self._reward_df, seed, identifier=identifier)
-
-    def _create_push_mpts(self, config_for_policy):
-        seed = randint(0, 10000)
-        push_likely_arms = config_for_policy.get('push_likely_arms', 1.0)
-        push_unlikely_arms = config_for_policy.get('push_unlikely_arms', 1.0)
-        control_host = config_for_policy.get('control_host', 'wally113')
-        identifier = config_for_policy.get('identifier', None)
-
-        return PushMPTS(
-            self._L, self._reward_df, seed, push_likely_arms,
-            push_unlikely_arms, control_host, identifier=identifier)
+                    self._seed += 1
     
-    def _create_inverted_push_mpts(self, config_for_policy):
-        seed = randint(0, 10000)
-        push_likely_arms = config_for_policy.get('push_likely_arms', 1.0)
-        push_unlikely_arms = config_for_policy.get('push_unlikely_arms', 1.0)
-        control_host = config_for_policy.get('control_host', 'wally113')
-        identifier = config_for_policy.get('identifier', None)
-
-        return InvertedPushMPTS(
-            self._L, self._reward_df, seed, push_likely_arms,
-            push_unlikely_arms, control_host, identifier=identifier)    
-
-    def _create_cpush_mpts(self, config_for_policy):
-        seed = randint(0, 10000)
-        push_likely_arms = config_for_policy.get('push_likely_arms', 1.0)
-        push_unlikely_arms = config_for_policy.get('push_unlikely_arms', 1.0)
-        control_host = config_for_policy.get('control_host', 'wally113')
-        context_df = _read_context_from_config(config_for_policy)
-        cpush = config_for_policy.get('cpush', 1.0)
-        max_number_pushes = config_for_policy.get('max_number_pushes', 10)
-        identifier = config_for_policy.get('identifier', None)
-
-        return CPushMpts(
-            self._L, self._reward_df, seed, push_likely_arms,
-            push_unlikely_arms, control_host, context_df, cpush,
-            max_number_pushes, identifier)
-
-    def _create_epsilon_greedy(self, config_for_policy):
-        seed = randint(0, 10000)
-        epsilon = config_for_policy.get('epsilon', 0.0)
-        identifier = config_for_policy.get('identifier', None)
-
-        return EGreedy(self._L, self._reward_df, seed, epsilon,
-                       identifier=identifier)
-
-    def _create_dkegreedy_policy(self, config_for_policy):
-        seed = randint(0, 10000)
-        epsilon = config_for_policy.get('epsilon', 0.0)
-        init_ev_likely_arms = config_for_policy.get('init_ev_likely_arms', 1.0)
-        init_ev_unlikely_arms = config_for_policy.get(
-            'init_ev_unlikely_arms', 1.0)
-        control_host = config_for_policy.get('control_host', 'wally113')
-        identifier = config_for_policy.get('identifier', None)
-
-        return DKEGreedy(self._L, self._reward_df, seed, epsilon,
-                         init_ev_likely_arms, init_ev_unlikely_arms,
-                         control_host, identifier=identifier)
-
-    def _create_cdkegreedy_policy(self, config_for_policy):
-        seed = randint(0, 10000)
-        epsilon = config_for_policy.get('epsilon', 0.0)
-        init_ev_likely_arms = config_for_policy.get('init_ev_likely_arms', 1.0)
-        init_ev_unlikely_arms = config_for_policy.get(
-            'init_ev_unlikely_arms', 1.0)
-        control_host = config_for_policy.get('control_host', 'wally113')
-        context_df = _read_context_from_config(config_for_policy)
-        push = config_for_policy.get('push', 0.1)
-        max_number_pushes = config_for_policy.get('max_number_pushes', 10)
-        push_kind = config_for_policy.get('push_kind', 'plus')
-        identifier = config_for_policy.get('identifier', None)
-
-        return CDKEGreedy(
-            self._L, self._reward_df, seed, epsilon, init_ev_likely_arms,
-            init_ev_unlikely_arms, control_host, context_df, push,
-            max_number_pushes, push_kind, identifier=identifier)
-
-    def _create_contextual_egreedy(self, config_for_policy):
-        context_df = _read_context_from_config(config_for_policy)
-
-        if context_df is None:
-            context_df = pd.DataFrame(data=np.zeros(
-                len(self._reward_df.index.values)))
-
-        seed = randint(0, 10000)
-        epsilon = config_for_policy.get('epsilon', 0.0)
-        batch_size = config_for_policy.get('batch_size', 50)
-        identifier = config_for_policy.get('identifier', None)
-        max_iter = config_for_policy.get('max_iter', 100)
-
-        return EGreedyCB(
-            self._L, self._reward_df, context_df, seed, epsilon, batch_size,
-            identifier, max_iter)
-
     def serialize_results(self):
         """Write the results of the experiment into the config and stores the
         regret of the policies in csv files. Writes both to the
@@ -462,3 +373,15 @@ class Experiment:
           dict (string->float[])
         """
         return self._average_cum_regret
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description="Runs experiments"
+    )
+
+    parser.add_argument('filepath', help='The path of the config yaml file')
+
+    args = parser.parse_args()
+    
+    e = Experiment(args.filepath)
+    e.run()

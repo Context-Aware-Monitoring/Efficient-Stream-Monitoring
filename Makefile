@@ -12,6 +12,3 @@ data: make_directories
 	unzip -q concurrent\ data.zip -d data/raw
 	mv data/raw/concurrent\ data data/raw/concurrent_data
 	unzip -q sequential_data.zip -d data/raw
-	python3 src/data/make_dataset.py --all
-	python3 src/features/build_features.py --context
-

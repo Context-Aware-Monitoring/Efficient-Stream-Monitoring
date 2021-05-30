@@ -145,7 +145,6 @@ def _generate_unified_metrics_dataframe(hosts, seq):
 
     return unified_df
 
-
 def _compute_pairwise_correlation_of_arms(
         metrics_df, window_size, window_step, method):
     """Computes a DataFrame that contains the correlation for arms (pairs
@@ -185,6 +184,7 @@ def _compute_pairwise_correlation_of_arms(
          for offset in range(
              0, correlation_matrix.shape[0],
              values_in_window * window_step)]).flatten()
+
     correlation_matrix = correlation_matrix[indicies_of_relevant_windows]
 
     indicies_arms_access_order = np.array(

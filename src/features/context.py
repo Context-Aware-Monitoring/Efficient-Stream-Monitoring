@@ -2,29 +2,25 @@
 algorithm
 """
 import os
-import csv
 from datetime import datetime, timedelta
 import json
 from abc import ABC, abstractmethod
 import pandas as pd
 import numpy as np
-import trace_pre_processing as tpp
-
-start_sequential = np.datetime64('2019-11-19 17:38:49')
-end_sequential = np.datetime64('2019-11-20 01:30:00')
-
-start_concurrent = np.datetime64('2019-11-19 15:12:13')
-end_concurrent = np.datetime64('2019-11-20 19:45:00')
+import typing
+from typing import List
+import global_config
+from . import trace_pre_processing as tpp
 
 def generate_context_csv(
         event_extractor,
-        paths,
-        seq=True,
-        window_size=30,
-        step=5,
-        columns=None,
-        outdir='./'
-):
+        paths:List[str],
+        seq: bool=True,
+        window_size:int=30,
+        step:int=5,
+        columns:List[str]=None,
+        outdir:str='./'
+)->str:
     """Writes a context.csv file that can be processed by a contextual bandit
     algorithm. It extracts features for each event in the passed traces.
     Afterwards in aggregates the features using a sliding window approach
@@ -50,8 +46,8 @@ def generate_context_csv(
     stime = datetime.now()
     print('Generating context.csv...')
 
-    start = start_sequential if seq else start_concurrent
-    end = end_sequential if seq else end_concurrent
+    start = global_config.START_TRACES_SEQUENTIAL if seq else global_config.START_TRACES_CONCURRENT
+    end = global_config.END_TRACES_SEQUENTIAL if seq else global_config.END_TRACES_CONCURRENT
 
     start = pd.to_datetime(start)
     end = pd.to_datetime(end)
@@ -102,7 +98,6 @@ def generate_context_csv(
             context_df.loc[trace_df.index.values[mask],
                            trace_df.columns.values] += trace_df.values[mask]
 
-            #_insert_event_features_into_context_df(event_features, context_df)
             i = i + 1
 
     windowed_context = context_df.rolling(window=window_size).sum().loc[pd.date_range(
@@ -123,27 +118,11 @@ def generate_context_csv(
     return filepath
 
 
-def transform_context_csv(
-        context_filepath, context_transformer, output_path='./test.csv'):
-    """Reads in the context csv file and transform it using the
-    context_transformer.
-    """
-    stime = datetime.now()
-    print("Transform context")
-    with open(context_filepath) as csvfile:
-        reader = csv.reader(csvfile)
-        next(reader)
-        with open(output_path, mode='w') as output_file:
-            csv_writer = csv.writer(output_file, delimiter=',')
-            for row in reader:
-                outrow = context_transformer.transform_context_row(row)
-                csv_writer.writerow(outrow)
-    print('Transformation finished, took %d seconds' %
-          ((datetime.now() - stime).seconds))
-    print('Wrote file %s' % output_path)
-
-
-def _compute_windowed_context_df(context_df, window_size, step):
+def _compute_windowed_context_df(
+        context_df: pd.DataFrame,
+        window_size: int,
+        step: int
+)->pd.DataFrame:
     """Sums up the features in the context DataFrame using a sliding window
     approach.
 
@@ -193,7 +172,7 @@ def _generate_context_filepath(outdir, kind, seq, window_size, step):
     return outdir + seq_or_con + '_context_' + kind + '_w' + str(window_size) + '_s' + str(step) + '.csv'
 
 
-def _get_start_as_datetime(event_json):
+def _get_start_as_datetime(event_json: json):
     """This method reads the start timestamp of the event and returns it as
     a datetime object.
 
@@ -216,7 +195,7 @@ def _get_start_as_datetime(event_json):
     return np.datetime64(date_and_time_string)
 
 
-def _get_stop_as_datetime(event_json):
+def _get_stop_as_datetime(event_json)->datetime:
     """Reads the stop timestamp of the event and returns it as a datetime
     object.
 
@@ -258,7 +237,7 @@ class AbstractTraceExtractor(ABC):
         Returns the name of the extractor.
     """
 
-    def extract_features_for_events(self, trace_json):
+    def extract_features_for_events(self, trace_json:json)->List[dict]:
         """Returns the features for each event in the trace
 
         Args:
@@ -278,7 +257,7 @@ class AbstractTraceExtractor(ABC):
         )
 
     @abstractmethod
-    def _get_features(self, trace_event):
+    def _get_features(self, trace_event: json)->dict:
         """Abstract method to do the actual extraction of features from events.
 
         Args:
@@ -290,7 +269,7 @@ class AbstractTraceExtractor(ABC):
         return
 
     @abstractmethod
-    def get_name(self):
+    def get_name(self)->str:
         """Returns the name of the extractor.
 
         Returns:
@@ -303,10 +282,10 @@ class HostExtractor(AbstractTraceExtractor):
     """This extractor extracts the host of the event.
     """
 
-    def _get_features(self, trace_event):
+    def _get_features(self, trace_event:json)->dict:
         return {trace_event['info']['host']: 1}
 
-    def get_name(self):
+    def get_name(self)->str:
         return 'host-traces'
 
 
@@ -314,12 +293,25 @@ class WorkloadExtractor(AbstractTraceExtractor):
     """This extractor extracts the arriving events for computing hosts.
     """
 
-    def _get_features(self, trace_event):
+    def _get_features(self, trace_event:json)->dict:
         host = trace_event['info']['host']
         name = trace_event['info']['name']
         return {
             '%s-%s' % (host, name): 1
         }
 
-    def get_name(self):
+    def get_name(self)->str:
         return 'workload-extractor'
+
+
+class StartStopExtractor(AbstractTraceExtractor):
+    """Extracts start and stop timestamp for an event.
+    """
+
+    def _get_features(self, trace_event: json)->dict:
+        return {
+            'stop' : _get_stop_as_datetime(trace_event)
+        }
+
+    def get_name(self)->str:
+        return 'start-stop-extractor'
