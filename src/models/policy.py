@@ -669,6 +669,7 @@ class InvertedPushMPTS(PushMPTS):
                  random_seed: int,
                  push_likely_arms: float=1.0,
                  push_unlikely_arms: float=1.0,
+                 push_temporal_correlated_arms: float=1.0,
                  control_host: str='wally113',
                  identifier: typing.Optional[str]=None
     ):
@@ -683,7 +684,8 @@ class InvertedPushMPTS(PushMPTS):
           control_host (string): Name of the control host
         """
         super().__init__(L, reward_df, random_seed, push_likely_arms,
-                         push_unlikely_arms, control_host, identifier)
+                         push_unlikely_arms, push_temportal_correlated_arms,
+                         control_host, identifier)
 
         self._alpha = self._compute_init_posterior()
         self._beta = self._compute_init_prior()
