@@ -412,7 +412,7 @@ def _generate_cdkegreedy_parameter_optimization_experiment_configs():
         )
     )
 
-        policies.extend(
+    policies.extend(
         get_cross_validated_policies(
             {
                 'name': 'cdkegreedy',
