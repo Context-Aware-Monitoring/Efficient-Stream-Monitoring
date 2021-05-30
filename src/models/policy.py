@@ -514,7 +514,7 @@ class CPushMpts(PushMPTS):
                  push_temporal_correlated_arms:float=1.0,
                  control_host:str='wally113',
                  cpush:float=1.0,
-                 max_number_pushes:int=10,
+                 q:int=10,
                  one_active_host_sufficient_for_push:bool=True,
                  identifier:typing.Optional[str]=None
     ):
@@ -532,7 +532,7 @@ class CPushMpts(PushMPTS):
         self._arm_knowledge = PushArmKnowledge(self._arms, one_active_host_sufficient_for_push, control_host)        
         self._context_df = context_df
         self._cpush = cpush
-        self._max_number_pushes = max_number_pushes
+        self._max_number_pushes = q
         self._no_pushed = np.zeros(self._K)
 
     def _pick_arms(self):
