@@ -214,7 +214,7 @@ class Experiment:
                     elif name == 'cdkegreedy':
                         self._policies[current_run].append(CDKEGreedy(self._L, self._reward_df, context, **config_for_policy))
                     elif name == 'cpush-mpts':
-                        self._policies[current_run].append(CPushMPTS(self._L, self._reward_df, self._seed, context, **config_for_policy))
+                        self._policies[current_run].append(CPushMpts(self._L, self._reward_df, self._seed, context, **config_for_policy))
                     elif name == 'cb-egreedy':
                         self._policies[current_run].append(EGreedyCB(self._L, self._reward_df, self._seed, context, **config_for_policy))
 

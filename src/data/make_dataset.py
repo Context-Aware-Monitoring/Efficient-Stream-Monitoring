@@ -256,16 +256,16 @@ def _write_experiment_config(config: dict, name: str):
 
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
-    _generate_baseline_experiment_configs()
-    _generate_dkgreedy_parameter_optimization_configs()
-    _generate_push_mpts_parameter_optimization_experiment_configs()
-    _generate_cdkegreedy_parameter_optimization_experiment_configs()
+    # _generate_baseline_experiment_configs()
+    # _generate_dkgreedy_parameter_optimization_configs()
+    # _generate_push_mpts_parameter_optimization_experiment_configs()
+    # _generate_cdkegreedy_parameter_optimization_experiment_configs()
     _generate_cpush_mpts_parameter_optimization_experiment_configs()
-    _generate_dkegreedy_wrong_domainknowledge_configs()
-    _generate_push_mpts_wrong_domainknowledge_configs()
-    _generate_static_network_mpts_configs()
-    _generate_dynamic_network_mpts_configs()
-    _generate_random_network_mpts_configs()
+    # _generate_dkegreedy_wrong_domainknowledge_configs()
+    # _generate_push_mpts_wrong_domainknowledge_configs()
+    # _generate_static_network_mpts_configs()
+    # _generate_dynamic_network_mpts_configs()
+    # _generate_random_network_mpts_configs()
 
 
 def _write_config_for_params(
@@ -299,7 +299,7 @@ def _write_config_for_params(
 def _write_configs_for_policies(policies, name=''):
     Parallel(n_jobs=n_jobs)(
         delayed(_write_config_for_params)(
-            seed,
+            seed + 2500,
             params[0],
             params[1],
             params[2],
@@ -505,7 +505,8 @@ def _generate_cpush_mpts_parameter_optimization_experiment_configs():
                 + '/processed/context/%s_context_host-traces_w%d_s%d.csv'
             },
             {
-                'push': [0.1, 0.5, 1, 5, 10],
+                'push_likely_arms': [0.1, 0.5, 1, 2, 5, 10],
+                'push_unlikely_arms': [0.1, 0.5, 1, 2, 5, 10],
                 'cpush': [0.1, 0.5, 1, 5, 10],
                 'q': [5, 10, 20, 100],
                 'push_temporal_correlated_arms': [0.8, 0.9, 1.0],
