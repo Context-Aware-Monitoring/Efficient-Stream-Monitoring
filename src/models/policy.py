@@ -509,7 +509,7 @@ class CPushMpts(PushMPTS):
                  reward_df: pd.DataFrame,
                  random_seed: int,
                  context_df:pd.DataFrame,
-                 push_likely_arm:float=1.0,
+                 push_likely_arms:float=1.0,
                  push_unlikely_arms:float=1.0,
                  push_temporal_correlated_arms:float=1.0,
                  control_host:str='wally113',
