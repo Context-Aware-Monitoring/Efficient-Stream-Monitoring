@@ -259,8 +259,8 @@ def _generate_experiment_configs():
     # _generate_baseline_experiment_configs()
     # _generate_dkgreedy_parameter_optimization_configs()
     # _generate_push_mpts_parameter_optimization_experiment_configs()
-    # _generate_cdkegreedy_parameter_optimization_experiment_configs()
-    _generate_cpush_mpts_parameter_optimization_experiment_configs()
+    _generate_cdkegreedy_parameter_optimization_experiment_configs()
+    # _generate_cpush_mpts_parameter_optimization_experiment_configs()
     # _generate_dkegreedy_wrong_domainknowledge_configs()
     # _generate_push_mpts_wrong_domainknowledge_configs()
     # _generate_static_network_mpts_configs()
@@ -299,7 +299,7 @@ def _write_config_for_params(
 def _write_configs_for_policies(policies, name=''):
     Parallel(n_jobs=n_jobs)(
         delayed(_write_config_for_params)(
-            seed + 2500,
+            seed + 4500,
             params[0],
             params[1],
             params[2],
@@ -398,7 +398,7 @@ def _generate_cdkegreedy_parameter_optimization_experiment_configs():
                 'name': 'cdkegreedy',
                 'context_path':
                 global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
-                'context_kind': 'plus'
+                'push_kind': 'plus'
             },
             {
                 'epsilon': [0, 0.01, 0.05, 0.1, 0.2],
@@ -406,6 +406,26 @@ def _generate_cdkegreedy_parameter_optimization_experiment_configs():
                 'init_ev_unlikely_arms': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
                 'init_ev_temporal_correlated_arms': [0.8, 0.9, 1.0],
                 'push': [0.01, 0.05, 0.1, 0.2, 0.3, 0.5],
+                'max_number_pushes': [5, 10, 20, 100],
+                'one_active_host_sufficient_for_push': [True, False]
+            }
+        )
+    )
+
+        policies.extend(
+        get_cross_validated_policies(
+            {
+                'name': 'cdkegreedy',
+                'context_path':
+                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
+                'push_kind': 'multiply'
+            },
+            {
+                'epsilon': [0, 0.01, 0.05, 0.1, 0.2],
+                'init_ev_likely_arms': [0.7, 0.8, 0.9],
+                'init_ev_unlikely_arms': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
+                'init_ev_temporal_correlated_arms': [0.8, 0.9, 1.0],
+                'push': [1.05, 1.1, 1.2, 1.5],
                 'max_number_pushes': [5, 10, 20, 100],
                 'one_active_host_sufficient_for_push': [True, False]
             }
