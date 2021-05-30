@@ -202,11 +202,11 @@ class Experiment:
                     elif name == 'push-mpts':
                         self._policies[current_run].append(PushMPTS(self._L, self._reward_df, self._seed, **config_for_policy))                                        
                     elif name == 'network-mpts':
-                        self._polcies[current_run].append(StaticNetworkMPTS(self._L, self._reward_df, self._seed, **config_for_policy))
+                        self._policies[current_run].append(StaticNetworkMPTS(self._L, self._reward_df, self._seed, **config_for_policy))
                     elif name == 'dynamic-network-mpts':
-                        self._polcies[current_run].append(DynamicNetworkMPTS(self._L, self._reward_df, self._seed, context, **config_for_policy))
+                        self._policies[current_run].append(DynamicNetworkMPTS(self._L, self._reward_df, self._seed, context, **config_for_policy))
                     elif name == 'random-network-mpts':
-                        self._polcies[current_run].append(RandomNetworkMPTS(self._L, self._reward_df, self._seed, **config_for_policy))
+                        self._policies[current_run].append(RandomNetworkMPTS(self._L, self._reward_df, self._seed, **config_for_policy))
                     elif name == 'inverted-push-mpts':
                         self._policies[current_run].append(InvertedPushMPTS(self._L, self._reward_df, self._seed, **config_for_policy))
                     elif name == 'dkgreedy':
