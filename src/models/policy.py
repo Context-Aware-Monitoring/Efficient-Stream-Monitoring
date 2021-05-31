@@ -586,7 +586,11 @@ class EGreedyCB(AbstractBandit):
             identifier:typing.Optional[str]=None
     ):
         super().__init__(L, reward_df,identifier)
-        self._context_df = context_df
+        if context_df is not None:
+            self._context_df = context_df
+        else:
+            self._context_df = pd.DataFrame(data={0: np.zeros(self._T)})
+
         self._solver = solver
         self._context_identifier = context_identifier
         self._identifier = identifier
