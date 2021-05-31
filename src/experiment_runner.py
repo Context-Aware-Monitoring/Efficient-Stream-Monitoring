@@ -5,12 +5,15 @@ import multiprocessing as mp
 import os
 from os.path import dirname, abspath
 import argparse
+import logging
 import numpy as np
 from experiment import Experiment
 
 DATA_DIR = '%s/data' % dirname(dirname(abspath(__file__)))
 EXPERIMENT_CONFIG_DIR = '%s/interim/experiment_configs' % DATA_DIR
 
+logging.basicConfig(filename='experiments.log',
+                    encoding='utf-8', level=logging.INFO)
 
 def perform_experiment_for_config_files(experiment_config_paths):
     """Target for the process to run the experiments.
@@ -19,10 +22,12 @@ def perform_experiment_for_config_files(experiment_config_paths):
       experiment_config_paths (string[]): Path to the .yaml config files of the
       experiments.
     """
-    for current_path in experiment_config_paths:
-        print('Start experiment %s' % current_path)
+    for i,current_path in enumerate(experiment_config_paths):
+        logging.info('Start experiment %d/%d on %d' % (i, len(experiment_config_paths), os.getpid()))
         experiment = Experiment(current_path)
         experiment.run()
+
+        del experiment
 
 
 if __name__ == '__main__':
