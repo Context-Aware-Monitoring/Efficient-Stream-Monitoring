@@ -1,6 +1,7 @@
 """Groups multiple policies and runs them on the same reward csv file and L.
 """
 import sys
+import os
 from os.path import dirname, abspath
 import logging
 import time
@@ -137,7 +138,9 @@ class Experiment:
           additional_config (dict): Additional configuration
         """
         self._experiment_name = None
+        self._config_path = None
         if config_path is not None and additional_config == {}:
+            self._config_path = config_path
             self._experiment_name = config_path.split('/')[-1].split('.')[0]
 
         config = additional_config
@@ -308,7 +311,10 @@ class Experiment:
         self._average_cum_regret = ordered_average_cum_regret
 
         self.serialize_results()
-
+        
+        if self._config_path is not None:
+            os.remove(self._config_path)
+                
         if self._experiment_name is not None:
             logging.info(
                 '%s: Finished experiment %s' %
