@@ -15,21 +15,26 @@ EXPERIMENT_CONFIG_DIR = '%s/interim/experiment_configs' % DATA_DIR
 logging.basicConfig(filename='experiments.log',
                     encoding='utf-8', level=logging.INFO)
 
-def perform_experiment_for_config_files(experiment_config_paths):
+
+def perform_experiment_for_config_files(queue: mp.Queue):
     """Target for the process to run the experiments.
 
     Args:
       experiment_config_paths (string[]): Path to the .yaml config files of the
       experiments.
     """
-    for i,current_path in enumerate(experiment_config_paths):
-        logging.info('Start experiment %d/%d on %d' % (i, len(experiment_config_paths), os.getpid()))
-        experiment = Experiment(current_path)
-        experiment.run()
+    
+    while True:
+        try:
+            filepath = queue.get()
+            logging.info('Start experiment %s on %d' % (filepath, os.getpid()))
+            experiment = Experiment(filepath)
+            experiment.run()
 
-        del experiment
-
-
+            del experiment
+        except mp.queues.Empty:
+            return
+            
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Runs experiments using multiple processes"
@@ -46,13 +51,15 @@ if __name__ == '__main__':
     filepaths = np.array(list(map(lambda current_file: '%s/%s' %
                          (EXPERIMENT_CONFIG_DIR, current_file), files)))
 
-    batch_size = int(np.ceil(len(files) / no_processes))
+    config_files_queue = mp.Queue(len(filepaths))
+    for filepath in filepaths:
+        config_files_queue.put(filepath)
 
     processes = []
     for i in range(no_processes):
         proc = mp.Process(
             target=perform_experiment_for_config_files,
-            args=(filepaths[i * batch_size: (i + 1) * batch_size],))
+            args=(config_files_queue,))
         processes.append(proc)
         proc.start()
 
