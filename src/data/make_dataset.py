@@ -299,7 +299,7 @@ def _write_config_for_params(
 def _write_configs_for_policies(policies, name=''):
     Parallel(n_jobs=n_jobs)(
         delayed(_write_config_for_params)(
-            seed + 4500,
+            seed + 5500,
             params[0],
             params[1],
             params[2],
