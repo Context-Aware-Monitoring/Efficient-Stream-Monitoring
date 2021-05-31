@@ -5,14 +5,12 @@ import copy
 import itertools
 import os
 import argparse
-from joblib import Parallel, delayed
 import pandas as pd
 import yaml
 import global_config
 from . import reward
-experiment_id = 0
-n_jobs = 1
 
+experiment_id = 0
 
 def clean_metrics_data(metrics_dir: str, start: str, end: str, normalize=True):
     """Cleans the metrics csv files by removing the rows that don't lie within
@@ -29,11 +27,8 @@ def clean_metrics_data(metrics_dir: str, start: str, end: str, normalize=True):
     metrics_file_paths.extend(
         list(map(lambda x: metrics_dir + x, os.listdir(metrics_dir))))
 
-    Parallel(n_jobs=min(n_jobs, len(metrics_file_paths)))(
-        delayed(_clean_metrics_data_for_csv_file)(
-            current_path, metrics_dir, start, end, normalize)
-        for current_path in metrics_file_paths
-    )
+    for current_path in metrics_file_paths:
+        _clean_metrics_data_for_csv_file(current_path, metrics_dir, start, end, normalize)
 
 
 def _clean_metrics_data_for_csv_file(current_path: str, metrics_dir: str,
@@ -86,6 +81,7 @@ def _write_cleaned_df_to_csv(current_path: str, metrics_dir: str,
 
 
 def _clean_metrics():
+    print('Clean metrics data')
     clean_metrics_data(
         '%s/raw/sequential_data/metrics/' % global_config.DATA_DIR,
         '2019-11-19 18:38:39 CEST',
@@ -100,15 +96,13 @@ def _clean_metrics():
 
 def _generate_rewards():
     """Computes and writes the reward files for the bandit algorithms."""
-    Parallel(n_jobs=n_jobs)(
-        delayed(_generate_reward_for_config)(seq, window_size, window_step)
-        for seq, window_size, window_step in itertools.product(
-            [True, False],
+    print('Generate rewards')
+    for seq, window_size, window_step in itertools.product(
+            global_config.SEQ,
             global_config.WINDOW_SIZES,
             global_config.WINDOW_STEPS
-        )
-    )
-
+    ):
+        _generate_reward_for_config(seq, window_size, window_step)
 
 def _generate_reward_for_config(seq: bool, window_size: int, window_step: int):
     reward.generate_reward_csv(
@@ -195,20 +189,12 @@ def get_cross_validated_policies(config_for_policy: dict, params):
              {'name': 'egreedy', 'epsilon': 0.5}]
     """
     policies = []
-    if len(params.keys()) == 1:
-        for k, values in params.items():
-            for current_value in values:
-                policies.append(config_for_policy | {k: current_value})
-    else:
-        k1 = list(params.keys())[0]
-        v1 = params[k1]
-        updated_params = dict(params)
-        del updated_params[k1]
-        for current_value in v1:
-            new_config = config_for_policy | {k1: current_value}
-            policies.extend(get_cross_validated_policies(
-                new_config, updated_params))
 
+    for permutation in itertools.product(*(params.values())):
+        permutation_config = dict((zip(params.keys(), permutation)))
+
+        policies.append(config_for_policy | permutation_config)
+    
     return policies
 
 
@@ -256,6 +242,7 @@ def _write_experiment_config(config: dict, name: str):
 
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
+    print('Generate experiment configs')
     # _generate_baseline_experiment_configs()
     # _generate_dkgreedy_parameter_optimization_configs()
     # _generate_push_mpts_parameter_optimization_experiment_configs()
@@ -297,8 +284,16 @@ def _write_config_for_params(
 
 
 def _write_configs_for_policies(policies, name=''):
-    Parallel(n_jobs=n_jobs)(
-        delayed(_write_config_for_params)(
+    for seed, params in enumerate(
+            itertools.product(
+                global_config.Ls,
+                global_config.WINDOW_SIZES,
+                global_config.WINDOW_STEPS,
+                global_config.SEQ,
+                global_config.REWARD_KINDS
+            )
+    ):
+        _write_config_for_params(
             seed + 5500,
             params[0],
             params[1],
@@ -307,16 +302,8 @@ def _write_configs_for_policies(policies, name=''):
             params[4],
             policies,
             name
-        ) for seed, params in enumerate(
-            itertools.product(
-                global_config.Ls,
-                global_config.WINDOW_SIZES,
-                global_config.WINDOW_STEPS,
-                global_config.SEQ,
-                global_config.REWARD_KINDS
-            )
         )
-    )
+
 
 def _generate_baseline_experiment_configs():
     policies = [
@@ -549,15 +536,8 @@ if __name__ == '__main__':
                         help='type of data that will be generated, one of clean, rewards, experiments, all'
                         )
 
-    parser.add_argument('-p',
-                        type=int,
-                        default=1,
-                        help='number of cores to utilize for generation'
-                        )
 
     args = parser.parse_args()
-
-    n_jobs = args.p
 
     stime = datetime.now()
     if args.t == 'all':

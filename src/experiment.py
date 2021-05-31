@@ -272,8 +272,8 @@ class Experiment:
         """
         if self._experiment_name is not None:
             logging.info(
-                '%s: Started experiment %s' %
-                (self._experiment_name, _get_now_as_string()))
+                '%s: Started experiment %s on pid %d' %
+                (self._experiment_name, _get_now_as_string(), os.getpid()))
         for current_run in range(self._number_of_runs):
             for i, pol in enumerate(self._policies[current_run]):
                 pol.run()
