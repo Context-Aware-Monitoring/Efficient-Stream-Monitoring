@@ -260,7 +260,7 @@ def _generate_experiment_configs():
     # _generate_dkgreedy_parameter_optimization_configs()
     # _generate_push_mpts_parameter_optimization_experiment_configs()
     _generate_cdkegreedy_parameter_optimization_experiment_configs()
-    # _generate_cpush_mpts_parameter_optimization_experiment_configs()
+    _generate_cpush_mpts_parameter_optimization_experiment_configs()
     # _generate_dkegreedy_wrong_domainknowledge_configs()
     # _generate_push_mpts_wrong_domainknowledge_configs()
     # _generate_static_network_mpts_configs()
@@ -378,7 +378,7 @@ def _generate_push_mpts_parameter_optimization_experiment_configs():
                 'push_likely_arms': [0.1, 0.5, 1, 2, 5, 10],
                 'push_unlikely_arms': [0.1, 0.5, 1, 2, 5, 10]
             }
-.25        )
+        )
     )
 
     _write_configs_for_policies(
