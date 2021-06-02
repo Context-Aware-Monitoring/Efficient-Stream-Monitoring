@@ -5,15 +5,9 @@ import multiprocessing as mp
 import os
 from os.path import dirname, abspath
 import argparse
-import logging
 import numpy as np
 from experiment import Experiment
-
-DATA_DIR = '%s/data' % dirname(dirname(abspath(__file__)))
-EXPERIMENT_CONFIG_DIR = '%s/interim/experiment_configs' % DATA_DIR
-
-logging.basicConfig(filename='experiments.log',
-                    encoding='utf-8', level=logging.INFO)
+import global_config
 
 
 def perform_experiment_for_config_files(queue: mp.Queue):
@@ -27,7 +21,6 @@ def perform_experiment_for_config_files(queue: mp.Queue):
     while True:
         try:
             filepath = queue.get()
-            logging.info('Start experiment %s on %d' % (filepath, os.getpid()))
             experiment = Experiment(filepath)
             experiment.run()
 
@@ -47,9 +40,9 @@ if __name__ == '__main__':
 
     no_processes = int(args.number_processes)
 
-    files = os.listdir(EXPERIMENT_CONFIG_DIR)
+    files = os.listdir(global_config.EXPERIMENT_CONFIG_DIR)
     filepaths = np.array(list(map(lambda current_file: '%s/%s' %
-                         (EXPERIMENT_CONFIG_DIR, current_file), files)))
+                         (global_config.EXPERIMENT_CONFIG_DIR, current_file), files)))
 
     config_files_queue = mp.Queue(len(filepaths))
     for filepath in filepaths:
