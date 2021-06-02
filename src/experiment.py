@@ -204,7 +204,7 @@ class Experiment:
                         self._policies[current_run].append(EGreedy(self._L, self._reward_df, self._seed, **config_for_policy))                    
                     elif name == 'push-mpts':
                         self._policies[current_run].append(PushMPTS(self._L, self._reward_df, self._seed, **config_for_policy))                                        
-                    elif name == 'network-mpts':
+                    elif name == 'static-network-mpts':
                         self._policies[current_run].append(StaticNetworkMPTS(self._L, self._reward_df, self._seed, **config_for_policy))
                     elif name == 'dynamic-network-mpts':
                         self._policies[current_run].append(DynamicNetworkMPTS(self._L, self._reward_df, self._seed, context, **config_for_policy))
@@ -273,7 +273,7 @@ class Experiment:
         if self._experiment_name is not None:
             logging.info(
                 '%s: Started experiment %s on pid %d' %
-                (self._experiment_name, _get_now_as_string(), os.getpid()))
+                (_get_now_as_string(), self._experiment_name, os.getpid()))
         for current_run in range(self._number_of_runs):
             for i, pol in enumerate(self._policies[current_run]):
                 pol.run()
@@ -318,7 +318,7 @@ class Experiment:
         if self._experiment_name is not None:
             logging.info(
                 '%s: Finished experiment %s' %
-                (self._experiment_name, _get_now_as_string()))
+                (_get_now_as_string(), self._experiment_name))
 
     def get_top_correlated_arms(self, t, names=False):
         """Returns either the names or index of the top L correlated arms for

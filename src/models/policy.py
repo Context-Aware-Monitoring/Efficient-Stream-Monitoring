@@ -232,10 +232,11 @@ class DKEGreedy(EGreedy):
         super().__init__(L, reward_df, random_seed, epsilon, identifier)
         self._arm_knowledge = ArmKnowledge(self._arms, control_host)
 
+        self._init_ev_temporal_correlated_arms = init_ev_temporal_correlated_arms
         self._init_ev_likely_arms = init_ev_likely_arms
         self._init_ev_unlikely_arms = init_ev_unlikely_arms
-        self._expected_values[self._arm_knowledge.arm_has_temporal_correlation] = init_ev_temporal_correlated_arms
         self._init_ev()
+        self._expected_values[self._arm_knowledge.arm_has_temporal_correlation] = init_ev_temporal_correlated_arms
 
 
     def _init_ev(self):
@@ -274,11 +275,12 @@ class DKEGreedy(EGreedy):
             return self._identifier
 
         if self._epsilon != 0:
-            return '%.1f/%.1f-dk-%.1f-greedy' % (self._init_ev_likely_arms,
-                                                 self._init_ev_unlikely_arms,
-                                                 self._epsilon)
+            return '%.1f,%.1f/%.1f-dk-%.1f-greedy' % (self._init_ev_temporal_correlated_arms,
+                                                      self._init_ev_likely_arms,
+                                                      self._init_ev_unlikely_arms,
+                                                      self._epsilon)
         
-        return '%.1f/%.1f-dkgreedy' % (self._init_ev_likely_arms, self._init_ev_unlikely_arms)
+        return '%.1f,%.1f/%.1f-dkgreedy' % (self._init_ev_temporal_correlated_arms, self._init_ev_likely_arms, self._init_ev_unlikely_arms)
 
 
 class CDKEGreedy(DKEGreedy):
@@ -447,6 +449,7 @@ class PushMPTS(MPTS):
         super().__init__(L, reward_df, random_seed, identifier)
         self._arm_knowledge = ArmKnowledge(self._arms, control_host)
 
+        self._push_temporal_correlated_arms = push_temporal_correlated_arms
         self._push_likely_arms = push_likely_arms
         self._push_unlikely_arms = push_unlikely_arms
 
@@ -484,8 +487,9 @@ class PushMPTS(MPTS):
         if self._identifier is not None:
             return self._identifier
 
-        return '%.1f-%.1f-push-mpts' % (
-            self._push_likely_arms, self._push_unlikely_arms)
+        return '%.1f,%.1f-%.1f-push-mpts' % (self._push_temporal_correlated_arms,
+                                             self._push_likely_arms,
+                                             self._push_unlikely_arms)
 
     def _pick_arms(self):
         """For each arm a random value gets drawn according to its beta
