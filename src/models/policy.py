@@ -10,29 +10,31 @@ import itertools
 import pandas as pd
 import typing
 from typing import List, Tuple
-from .domain_knowledge import ArmKnowledge, PushArmKnowledge, GraphArmKnowledge
+from .domain_knowledge import ArmKnowledge, PushArmKnowledge, GraphArmKnowledge, RandomGraphKnowledge
+
 
 def repeat_entry_L_times(X: np.ndarray, L: int) -> np.ndarray:
     return np.tile(X, L).reshape(-1, X.shape[1])
 
+
 class AbstractBandit(ABC):
     """Provides functionality for a basic non-contextual bandit."""
 
-    L : int
-    K : int
-    T : int
-    iteration : int
-    overall_regret : float
-    regret : List[float]
+    L: int
+    K: int
+    T: int
+    iteration: int
+    overall_regret: float
+    regret: List[float]
     cum_regret: List[float]
     average_regret: List[float]
-    name : str
-    
+    name: str
+
     def __init__(self,
                  L: int,
                  reward_df: pd.DataFrame,
-                 identifier: typing.Optional[str]=None
-    ):
+                 identifier: typing.Optional[str] = None
+                 ):
         self._L = L
         self._K = len(reward_df.columns)
         self._reward_df = reward_df
@@ -60,12 +62,12 @@ class AbstractBandit(ABC):
         return self._T
 
     @property
-    def iteration(self)->int:
+    def iteration(self) -> int:
         """Current iteration"""
         return self._iteration
 
     @property
-    def overall_regret(self)->float:
+    def overall_regret(self) -> float:
         """Total regret of the policy"""
         return np.sum(self._regret)
 
@@ -75,12 +77,12 @@ class AbstractBandit(ABC):
         return self._regret
 
     @property
-    def cum_regret(self)-> List[float]:
+    def cum_regret(self) -> List[float]:
         """Cumulated regret over the rounds"""
         return np.cumsum(self._regret)
 
     @property
-    def average_regret(self)-> List[float]:
+    def average_regret(self) -> List[float]:
         """Average regret over the rounds"""
         return np.mean(self._regret)
 
@@ -91,10 +93,13 @@ class AbstractBandit(ABC):
         for _ in range(0, self._T):
             self._pick_arms()
             self._learn()
-            
-            max_reward_this_round = np.sort(self._reward_df.values[self._iteration, :])[-self._L:].sum()
-            received_reward_this_round = (self._reward_df.values[self._iteration, self._picked_arms_indicies]).sum()
-            self._regret[self._iteration] =  max_reward_this_round - received_reward_this_round
+
+            max_reward_this_round = np.sort(
+                self._reward_df.values[self._iteration, :])[-self._L:].sum()
+            received_reward_this_round = (
+                self._reward_df.values[self._iteration, self._picked_arms_indicies]).sum()
+            self._regret[self._iteration] = max_reward_this_round - \
+                received_reward_this_round
             self._iteration += 1
 
     @abstractmethod
@@ -109,7 +114,7 @@ class AbstractBandit(ABC):
 
     @property
     @abstractmethod
-    def name(self)->str:
+    def name(self) -> str:
         """Returns the name of the bandit
 
         Returns:
@@ -125,8 +130,8 @@ class RandomPolicy(AbstractBandit):
                  L: int,
                  reward_df: pd.DataFrame,
                  random_seed: int,
-                 identifier: typing.Optional[str]=None
-    ):
+                 identifier: typing.Optional[str] = None
+                 ):
         super().__init__(L, reward_df, identifier)
         self._rnd = np.random.RandomState(random_seed)
 
@@ -138,22 +143,24 @@ class RandomPolicy(AbstractBandit):
         return 'random'
 
     def _pick_arms(self):
-        self._picked_arms_indicies = self._rnd.choice(self._K, self._L, replace=False)
-    
+        self._picked_arms_indicies = self._rnd.choice(
+            self._K, self._L, replace=False)
+
+
 class EGreedy(AbstractBandit):
     """E-Greedy bandit algorithm that picks the arms with highest expected
     reward greedily with probability 1-e (exploitation) and random arms with
     probablity e (exploration).
     """
 
-    epsilon : float
-    
+    epsilon: float
+
     def __init__(
-            self, L : int,
-            reward_df : pd.DataFrame,
-            random_seed : int,
-            epsilon : float=0.1,
-            identifier : typing.Optional[str]=None
+            self, L: int,
+            reward_df: pd.DataFrame,
+            random_seed: int,
+            epsilon: float = 0.1,
+            identifier: typing.Optional[str] = None
     ):
         super().__init__(L, reward_df, identifier)
         self._epsilon = epsilon
@@ -183,10 +190,12 @@ class EGreedy(AbstractBandit):
         if self._epsilon > self._rnd.rand():
             self.explore_arms()
         else:
-            self._picked_arms_indicies = np.argsort(self._expected_values)[-self._L:]
+            self._picked_arms_indicies = np.argsort(
+                self._expected_values)[-self._L:]
 
     def explore_arms(self):
-        self._picked_arms_indicies = self._rnd.choice(self._K, self._L, replace=False)
+        self._picked_arms_indicies = self._rnd.choice(
+            self._K, self._L, replace=False)
 
     def _learn(self):
         """Learns from the reward for the picked arms. Updates the empirical
@@ -195,7 +204,8 @@ class EGreedy(AbstractBandit):
         self._expected_values[self._picked_arms_indicies] = (
             self._expected_values[self._picked_arms_indicies]
             * self._num_plays[self._picked_arms_indicies]
-            + self._reward_df.values[self._iteration, self._picked_arms_indicies]
+            + self._reward_df.values[self._iteration,
+                                     self._picked_arms_indicies]
         ) / (self._num_plays[self._picked_arms_indicies] + 1)
         self._num_plays[self._picked_arms_indicies] += 1
 
@@ -212,12 +222,12 @@ class DKEGreedy(EGreedy):
             L: int,
             reward_df: pd.DataFrame,
             random_seed: int,
-            epsilon: float=0.1,
-            init_ev_likely_arms: float=0.95,
-            init_ev_unlikely_arms: float=0.75,
-            init_ev_temporal_correlated_arms: float=1.0,
-            control_host: str='wally113',
-            identifier: typing.Optional[str]=None
+            epsilon: float = 0.1,
+            init_ev_likely_arms: float = 0.95,
+            init_ev_unlikely_arms: float = 0.75,
+            init_ev_temporal_correlated_arms: float = 1.0,
+            control_host: str = 'wally113',
+            identifier: typing.Optional[str] = None
     ):
         """Constructs the Domain Knowledge Epsilon-Greedy Algorithm.
 
@@ -237,7 +247,6 @@ class DKEGreedy(EGreedy):
         self._init_ev_unlikely_arms = init_ev_unlikely_arms
         self._init_ev()
         self._expected_values[self._arm_knowledge.arm_has_temporal_correlation] = init_ev_temporal_correlated_arms
-
 
     def _init_ev(self):
         """Intializes the expected value for the arms. An arm is a pair of
@@ -279,7 +288,7 @@ class DKEGreedy(EGreedy):
                                                       self._init_ev_likely_arms,
                                                       self._init_ev_unlikely_arms,
                                                       self._epsilon)
-        
+
         return '%.1f,%.1f/%.1f-dkgreedy' % (self._init_ev_temporal_correlated_arms, self._init_ev_likely_arms, self._init_ev_unlikely_arms)
 
 
@@ -292,20 +301,20 @@ class CDKEGreedy(DKEGreedy):
 
     def __init__(
             self,
-            L : int,
-            reward_df :pd.DataFrame,
-            random_seed : int,
-            context_df : pd.DataFrame,
-            epsilon : float=0.1,
-            init_ev_likely_arms : float=0.95,
-            init_ev_unlikely_arms: float=0.75,
-            init_ev_temporal_correlated_arms: float=1.0,
-            control_host: str='wally113',
-            push: float=1.0,
-            max_number_pushes: int=10,
-            push_kind:str='plus',
-            one_active_host_sufficient_for_push:bool=True,
-            identifier:typing.Optional[str]=None
+            L: int,
+            reward_df: pd.DataFrame,
+            random_seed: int,
+            context_df: pd.DataFrame,
+            epsilon: float = 0.1,
+            init_ev_likely_arms: float = 0.95,
+            init_ev_unlikely_arms: float = 0.75,
+            init_ev_temporal_correlated_arms: float = 1.0,
+            control_host: str = 'wally113',
+            push: float = 1.0,
+            max_number_pushes: int = 10,
+            push_kind: str = 'plus',
+            one_active_host_sufficient_for_push: bool = True,
+            identifier: typing.Optional[str] = None
     ):
         """
         Args:
@@ -317,8 +326,9 @@ class CDKEGreedy(DKEGreedy):
         """
         super().__init__(L, reward_df, random_seed, epsilon, init_ev_likely_arms,
                          init_ev_unlikely_arms, init_ev_temporal_correlated_arms,
-                         control_host,identifier=identifier)
-        self._arm_knowledge = PushArmKnowledge(self._arms, one_active_host_sufficient_for_push, control_host)
+                         control_host, identifier=identifier)
+        self._arm_knowledge = PushArmKnowledge(
+            self._arms, one_active_host_sufficient_for_push, control_host)
         self._context_df = context_df
         self._no_pushed = np.zeros(self._K)
         self._push = push
@@ -344,7 +354,7 @@ class CDKEGreedy(DKEGreedy):
             self._arm_knowledge.arms_eligible_for_push,
             self._no_pushed < self._max_number_pushes
         )
-        
+
         if self._push_kind == 'plus':
             pushed_expected_values = self._expected_values + \
                 (self._push * arm_gets_pushed)
@@ -352,7 +362,8 @@ class CDKEGreedy(DKEGreedy):
             factors = np.where(arm_gets_pushed, self._push, 1.0)
             pushed_expected_values *= factors
 
-        self._picked_arms_indicies = np.argsort(pushed_expected_values)[-self._L:]
+        self._picked_arms_indicies = np.argsort(
+            pushed_expected_values)[-self._L:]
 
         self._no_pushed[self._picked_arms_indicies] += arm_gets_pushed[self._picked_arms_indicies]
 
@@ -375,8 +386,8 @@ class MPTS(AbstractBandit):
                  L: int,
                  reward_df: pd.DataFrame,
                  random_seed: int,
-                 identifier:typing.Optional[str]=None
-    ):
+                 identifier: typing.Optional[str] = None
+                 ):
         """Constructs the MPTS policy.
 
         Args:
@@ -430,12 +441,12 @@ class PushMPTS(MPTS):
                  L: int,
                  reward_df: pd.DataFrame,
                  random_seed: int,
-                 push_likely_arms:float=1.0,
-                 push_unlikely_arms:float=1.0,
-                 push_temporal_correlated_arms: float=1.0,
-                 control_host: str='wally113',
-                 identifier:typing.Optional[str]=None
-    ):
+                 push_likely_arms: float = 1.0,
+                 push_unlikely_arms: float = 1.0,
+                 push_temporal_correlated_arms: float = 1.0,
+                 control_host: str = 'wally113',
+                 identifier: typing.Optional[str] = None
+                 ):
         """Constructs the Push Mpts algorithm.
 
         Args:
@@ -470,9 +481,9 @@ class PushMPTS(MPTS):
             * np.logical_or(
                 self._arm_knowledge.arm_lays_on_same_host,
                 self._arm_knowledge.arm_lays_on_control_host
-            )
+        )
 
-    def _compute_init_posterior(self)->np.ndarray:
+    def _compute_init_posterior(self) -> np.ndarray:
         """Computes the posterior distribution (beta) for the arms.
         Arms that don't get a push in the prior get a push in the posterior.
 
@@ -483,7 +494,7 @@ class PushMPTS(MPTS):
             * (self._compute_init_prior() == 0)
 
     @property
-    def name(self)->str:
+    def name(self) -> str:
         if self._identifier is not None:
             return self._identifier
 
@@ -509,19 +520,19 @@ class CPushMpts(PushMPTS):
     """
 
     def __init__(self,
-                 L:int,
+                 L: int,
                  reward_df: pd.DataFrame,
                  random_seed: int,
-                 context_df:pd.DataFrame,
-                 push_likely_arms:float=1.0,
-                 push_unlikely_arms:float=1.0,
-                 push_temporal_correlated_arms:float=1.0,
-                 control_host:str='wally113',
-                 cpush:float=1.0,
-                 q:int=10,
-                 one_active_host_sufficient_for_push:bool=True,
-                 identifier:typing.Optional[str]=None
-    ):
+                 context_df: pd.DataFrame,
+                 push_likely_arms: float = 1.0,
+                 push_unlikely_arms: float = 1.0,
+                 push_temporal_correlated_arms: float = 1.0,
+                 control_host: str = 'wally113',
+                 cpush: float = 1.0,
+                 q: int = 10,
+                 one_active_host_sufficient_for_push: bool = True,
+                 identifier: typing.Optional[str] = None
+                 ):
         """Constructs the contextual push MPTS algorithm.
 
         Args:
@@ -533,7 +544,8 @@ class CPushMpts(PushMPTS):
         super().__init__(L, reward_df, random_seed, push_likely_arms,
                          push_unlikely_arms, push_temporal_correlated_arms,
                          control_host, identifier)
-        self._arm_knowledge = PushArmKnowledge(self._arms, one_active_host_sufficient_for_push, control_host)        
+        self._arm_knowledge = PushArmKnowledge(
+            self._arms, one_active_host_sufficient_for_push, control_host)
         self._context_df = context_df
         self._cpush = cpush
         self._max_number_pushes = q
@@ -544,15 +556,15 @@ class CPushMpts(PushMPTS):
         algorithm to pick the arms.
         """
         current_context = self._context_df.values[self._iteration, :]
-        active_hosts = self._context_df.columns.values[current_context > 0]        
+        active_hosts = self._context_df.columns.values[current_context > 0]
 
-        self._arm_knowledge.update_active_hosts(active_hosts)        
+        self._arm_knowledge.update_active_hosts(active_hosts)
 
         alpha_pushed = self._alpha + self._arm_knowledge.arms_eligible_for_push * self._cpush
 
         theta = self._rnd.beta(alpha_pushed + 1, self._beta + 1)
         theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
-        
+
         self._picked_arms_indicies = np.argsort(theta)[-self._L:]
 
         self._no_pushed[self._picked_arms_indicies] += self._arm_knowledge.arms_eligible_for_push[self._picked_arms_indicies]
@@ -578,18 +590,18 @@ class EGreedyCB(AbstractBandit):
 
     def __init__(
             self,
-            L:int,
+            L: int,
             reward_df: pd.DataFrame,
-            random_seed:int,
-            context_df:pd.DataFrame,
-            epsilon: float=0.1,
-            batch_size:int=20,
-            max_iter:int=100,
-            solver:str='lbfgs',
-            context_identifier:str='',
-            identifier:typing.Optional[str]=None
+            random_seed: int,
+            context_df: pd.DataFrame,
+            epsilon: float = 0.1,
+            batch_size: int = 20,
+            max_iter: int = 100,
+            solver: str = 'lbfgs',
+            context_identifier: str = '',
+            identifier: typing.Optional[str] = None
     ):
-        super().__init__(L, reward_df,identifier)
+        super().__init__(L, reward_df, identifier)
         if context_df is not None:
             self._context_df = context_df
         else:
@@ -632,7 +644,8 @@ class EGreedyCB(AbstractBandit):
             if self._iteration == self._batch_size:
                 self._epsilon_greedy.fit(
                     repeat_entry_L_times(
-                        normalize(self._context_df.values[: self._batch_size, :], axis=1),
+                        normalize(
+                            self._context_df.values[: self._batch_size, :], axis=1),
                         self._L
                     ),
                     self._picked_arms.flatten(),
@@ -642,7 +655,8 @@ class EGreedyCB(AbstractBandit):
                 self._epsilon_greedy.fit(
                     repeat_entry_L_times(
                         normalize(
-                            self._context_df.values[self._iteration - self._batch_size: self._iteration, :],
+                            self._context_df.values[self._iteration -
+                                                    self._batch_size: self._iteration, :],
                             axis=1
                         ),
                         self._L
@@ -672,15 +686,15 @@ class InvertedPushMPTS(PushMPTS):
     """
 
     def __init__(self,
-                 L :int,
+                 L: int,
                  reward_df: pd.DataFrame,
                  random_seed: int,
-                 push_likely_arms: float=1.0,
-                 push_unlikely_arms: float=1.0,
-                 push_temporal_correlated_arms: float=1.0,
-                 control_host: str='wally113',
-                 identifier: typing.Optional[str]=None
-    ):
+                 push_likely_arms: float = 1.0,
+                 push_unlikely_arms: float = 1.0,
+                 push_temporal_correlated_arms: float = 1.0,
+                 control_host: str = 'wally113',
+                 identifier: typing.Optional[str] = None
+                 ):
         """Constructs the Inverted Push Mpts algorithm.
 
         Args:
@@ -706,7 +720,8 @@ class InvertedPushMPTS(PushMPTS):
 
         return '%.1f-%.1f-inverted-push-mpts' % (
             self._push_likely_arms, self._push_unlikely_arms)
-    
+
+
 class StaticNetworkMPTS(MPTS):
     """Policy where relationships between arms exist. Arms move in groups, and
     one arms might be related to other arms. Therefore when an arm receives a
@@ -719,16 +734,16 @@ class StaticNetworkMPTS(MPTS):
     weight: int
     control_host: str
     compute_hosts: List[str]
-    
+
     def __init__(
             self,
             L: int,
             reward_df: pd.DataFrame,
             random_seed: int,
-            weight:float =0.5,
-            control_host:str='wally113',
-            compute_hosts:List[str]=['wally117', 'wally122', 'wally123', 'wally124'],
-            identifier:typing.Optional[str]=None
+            weight: float = 0.5,
+            control_host: str = 'wally113',
+            compute_hosts: List[str] = ['wally117', 'wally122', 'wally123', 'wally124'],
+            identifier: typing.Optional[str] = None
     ):
         super().__init__(L, reward_df, random_seed, identifier)
         self._arm_knowledge = GraphArmKnowledge(self._arms, control_host)
@@ -736,7 +751,6 @@ class StaticNetworkMPTS(MPTS):
         self._weight = weight
         self._control_host = control_host
         self._compute_hosts = compute_hosts
-
 
     def _learn(self):
         """Update beta distribution of picked arms based on the reward. Updates
@@ -749,17 +763,19 @@ class StaticNetworkMPTS(MPTS):
         arm_number_of_updates = neighbors_played_arms.sum(axis=0)
         arm_gets_update = arm_number_of_updates > 0
 
-        reshaped_rewards = np.repeat(self._reward_df.values[self._iteration, self._picked_arms_indicies], self._K).reshape(-1, self._K)
+        reshaped_rewards = np.repeat(
+            self._reward_df.values[self._iteration, self._picked_arms_indicies], self._K).reshape(-1, self._K)
 
-        update = (self._weight * neighbors_played_arms * reshaped_rewards).sum(axis=0)[arm_gets_update]
+        update = (self._weight * neighbors_played_arms *
+                  reshaped_rewards).sum(axis=0)[arm_gets_update]
 
         self._alpha[arm_gets_update] += update
-        self._beta[arm_gets_update] += (arm_number_of_updates[arm_gets_update] * self._weight - update)
-        
+        self._beta[arm_gets_update] += (
+            arm_number_of_updates[arm_gets_update] * self._weight - update)
+
     @property
     def name(self):
         return '%.1f-network-mpts' % self._weight
-
 
 
 class DynamicNetworkMPTS(StaticNetworkMPTS):
@@ -769,15 +785,14 @@ class DynamicNetworkMPTS(StaticNetworkMPTS):
             L: int,
             reward_df: pd.DataFrame,
             random_seed: int,
-            context_df: pd.DataFrame,            
-            weight:float=0.5,
-            control_host:str='wally113',
-            compute_hosts:List[str]=['wally117', 'wally122', 'wally123', 'wally124'],
-            identifier:typing.Optional[str]=None
+            context_df: pd.DataFrame,
+            weight: float = 0.5,
+            control_host: str = 'wally113',
+            compute_hosts: List[str] = ['wally117', 'wally122', 'wally123', 'wally124'],
+            identifier: typing.Optional[str] = None
     ):
         super().__init__(L, reward_df, random_seed, weight, control_host, compute_hosts)
         self._context_df = context_df
-    
 
     def _pick_arms(self):
         super()._pick_arms()
@@ -788,45 +803,25 @@ class DynamicNetworkMPTS(StaticNetworkMPTS):
         self._arm_knowledge.update_active_hosts(active_hosts)
         self._edges = self._arm_knowledge.edges
 
-
     @property
     def name(self):
-        return '%.1f-dynamic-network-mpts' % self._weight    
+        return '%.1f-dynamic-network-mpts' % self._weight
+
 
 class RandomNetworkMPTS(StaticNetworkMPTS):
     def __init__(self,
                  L: int,
                  reward_df: pd.DataFrame,
                  random_seed: int,
-                 weight: float=0.5,
-                 control_host: str='wally113',
-                 compute_hosts: List[str]=['wally117', 'wally122', 'wally123', 'wally124'],
-                 probability_neighbors: List[float]=[0.4, 0.15, 0.15, 0.15, 0.15],
+                 weight: float = 0.5,
+                 probability_neighbors: List[float] = [0.4, 0.15, 0.15, 0.15, 0.15],
                  identifier=None
-    ):
+                 ):
         self._probability_neighbors = probability_neighbors
-        super().__init__(L, reward_df, random_seed, weight, control_host, compute_hosts, identifier)
-
-    def _get_edges(self):
-        number_arms = self._K
-        edges = []
-        for i, _ in enumerate(self._nodes):
-            number_neighbors = self._rnd.choice(
-                len(self._probability_neighbors),
-                1,
-                p=self._probability_neighbors
-            )
-            neighbors = np.zeros(number_arms, dtype=bool)
-            neighbors[self._rnd.choice(number_arms, number_neighbors)] = True
-            neighbors[i] = False
-            edges.extend(np.where(
-                neighbors,
-                self._weight,
-                0.0
-            )
-            )
-
-        return np.array(edges).reshape(number_arms, number_arms)
+        MPTS.__init__(self, L, reward_df, random_seed, identifier)
+        self._arm_knowledge = RandomGraphKnowledge(
+            self._K, weight, probability_neighbors, random_seed + 1)
+        self._weight = weight
 
     @property
     def name(self):
