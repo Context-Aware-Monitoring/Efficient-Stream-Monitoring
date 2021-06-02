@@ -9,7 +9,7 @@ WINDOW_STEPS = [5, 10, 20]
 Ls = [5, 10, 20, 50, 100]
 THRESHOLDS = [0.6, 0.7, 0.8]
 REWARD_KINDS = ['top', 'threshold']
-SEQ = [False]
+SEQ = [True, False]
 
 DATA_DIR = '%s/data' % (dirname(dirname(abspath(__file__))))
 REWARDS_DIR = '%s/processed/rewards' % DATA_DIR
