@@ -264,7 +264,7 @@ def _write_config_for_params(
         dict,
         name: str
 ):
-    name = "%s_L_%d_wsi_%d_ws_%d" % (name, L, wsi, ws)
+    name = "%s_%s_L_%d_wsi_%d_ws_%d" % (name, 'seq' if s else 'con', L, wsi, ws)
 
     config_for_this_round = set_window_size_and_step_in_context_path(
         {'seed': seed, 'L': L, 'policies': policies}, s, wsi, ws)
