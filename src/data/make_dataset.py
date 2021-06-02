@@ -11,7 +11,6 @@ from time import time
 import global_config
 from . import reward
 
-experiment_id = 0
 
 def clean_metrics_data(metrics_dir: str, start: str, end: str, normalize=True):
     """Cleans the metrics csv files by removing the rows that don't lie within
@@ -29,7 +28,8 @@ def clean_metrics_data(metrics_dir: str, start: str, end: str, normalize=True):
         list(map(lambda x: metrics_dir + x, os.listdir(metrics_dir))))
 
     for current_path in metrics_file_paths:
-        _clean_metrics_data_for_csv_file(current_path, metrics_dir, start, end, normalize)
+        _clean_metrics_data_for_csv_file(
+            current_path, metrics_dir, start, end, normalize)
 
 
 def _clean_metrics_data_for_csv_file(current_path: str, metrics_dir: str,
@@ -104,6 +104,7 @@ def _generate_rewards():
             global_config.WINDOW_STEPS
     ):
         _generate_reward_for_config(seq, window_size, window_step)
+
 
 def _generate_reward_for_config(seq: bool, window_size: int, window_step: int):
     reward.generate_reward_csv(
@@ -195,7 +196,7 @@ def get_cross_validated_policies(config_for_policy: dict, params):
         permutation_config = dict((zip(params.keys(), permutation)))
 
         policies.append(config_for_policy | permutation_config)
-    
+
     return policies
 
 
@@ -234,26 +235,23 @@ def _write_experiment_config(config: dict, name: str):
       name (str): Includes this name into the filename of the yaml file, to
       make the experiment identifiable.
     """
-    global experiment_id
-    experiment_id += 1
-    with open('%s/%s_experiment_config%d.yml'
-              % (global_config.EXPERIMENT_CONFIG_DIR, name, experiment_id), 'w') as yml_file:
+    with open('%s/%s.yml' % (global_config.EXPERIMENT_CONFIG_DIR, name), 'w') as yml_file:
         yaml.dump(config, yml_file, default_flow_style=False)
 
 
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
-    # _generate_baseline_experiment_configs()
-    # _generate_dkgreedy_parameter_optimization_configs()
-    # _generate_push_mpts_parameter_optimization_experiment_configs()
+    _generate_baseline_experiment_configs()
+    _generate_dkgreedy_parameter_optimization_configs()
+    _generate_push_mpts_parameter_optimization_experiment_configs()
     _generate_cdkegreedy_parameter_optimization_experiment_configs()
     _generate_cpush_mpts_parameter_optimization_experiment_configs()
-    # _generate_dkegreedy_wrong_domainknowledge_configs()
-    # _generate_push_mpts_wrong_domainknowledge_configs()
+    _generate_dkegreedy_wrong_domainknowledge_configs()
+    _generate_push_mpts_wrong_domainknowledge_configs()
     _generate_static_network_mpts_configs()
-    # _generate_dynamic_network_mpts_configs()
-    # _generate_random_network_mpts_configs()
+    _generate_dynamic_network_mpts_configs()
+    _generate_random_network_mpts_configs()
 
 
 def _write_config_for_params(
@@ -263,25 +261,28 @@ def _write_config_for_params(
         ws: int,
         s: bool,
         rk: str, policies:
-        dict, name: str
+        dict,
+        name: str
 ):
+    name = "%s_L_%d_wsi_%d_ws_%d" % (name, L, wsi, ws)
+
     config_for_this_round = set_window_size_and_step_in_context_path(
         {'seed': seed, 'L': L, 'policies': policies}, s, wsi, ws)
 
     if rk == 'top':
         reward_path = get_reward_path('top', s, wsi, ws, L=L)
         _write_experiment_config(config_for_this_round | {
-            'reward_path': reward_path}, name)
+            'reward_path': reward_path}, '%s_r_top' % name)
     elif rk == 'continous':
         reward_path = get_reward_path('continous', s, wsi, ws)
         _write_experiment_config(config_for_this_round | {
-            'reward_path': reward_path}, name)
+            'reward_path': reward_path}, '%s_r_continous' % name)
     elif rk == 'threshold':
         for th in global_config.THRESHOLDS:
             reward_path = get_reward_path(
                 'threshold', s, wsi, ws, threshold=th)
             _write_experiment_config(config_for_this_round | {
-                'reward_path': reward_path}, name)
+                'reward_path': reward_path}, '%s_r_threshold_%.1f' % (name, th))
 
 
 def _write_configs_for_policies(policies, name=''):
@@ -320,7 +321,7 @@ def _generate_baseline_experiment_configs():
             'name': 'cb-egreedy',
             'batch_size': 50,
             'epsilon': 0.1,
-            'max_iter': 2500,
+            'max_iter': 100,
             'context_path': global_config.DATA_DIR
             + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
             'context_identifier': 'workload'
@@ -346,7 +347,7 @@ def _generate_dkgreedy_parameter_optimization_configs():
     policies.extend(get_cross_validated_policies(
         {'name': 'dkgreedy'}, {
             'epsilon': [0.0, 0.01, 0.05, 0.1, 0.2],
-            'init_ev_temporal_correlated_arms': [0.8,0.9,1.0],
+            'init_ev_temporal_correlated_arms': [0.8, 0.9, 1.0],
             'init_ev_likely_arms': [0.8, 0.9, 1.0],
             'init_ev_unlikely_arms': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 1.0]
         }))
@@ -515,11 +516,11 @@ def _generate_cpush_mpts_parameter_optimization_experiment_configs():
                 + '/processed/context/%s_context_host-traces_w%d_s%d.csv'
             },
             {
-                'push_likely_arms': [0.0,0.5],
+                'push_likely_arms': [0.0, 0.5],
                 'push_unlikely_arms': [5, 10],
                 'cpush': [0.1, 1, 5, 10],
                 'q': [5, 10, 20, 100],
-                'push_temporal_correlated_arms': [1.0,5.0],
+                'push_temporal_correlated_arms': [1.0, 5.0],
                 'one_active_host_sufficient_for_push': [True, False]
             }
         )
@@ -538,7 +539,6 @@ if __name__ == '__main__':
                         required=True,
                         help='type of data that will be generated, one of clean, rewards, experiments, all'
                         )
-
 
     args = parser.parse_args()
 
