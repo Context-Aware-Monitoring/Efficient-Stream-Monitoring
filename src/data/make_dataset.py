@@ -243,15 +243,16 @@ def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
     _generate_baseline_experiment_configs()
-    _generate_dkgreedy_parameter_optimization_configs()
-    _generate_push_mpts_parameter_optimization_experiment_configs()
-    _generate_cdkegreedy_parameter_optimization_experiment_configs()
-    _generate_cpush_mpts_parameter_optimization_experiment_configs()
-    _generate_dkegreedy_wrong_domainknowledge_configs()
-    _generate_push_mpts_wrong_domainknowledge_configs()
-    _generate_static_network_mpts_configs()
-    _generate_dynamic_network_mpts_configs()
-    _generate_random_network_mpts_configs()
+    # _generate_sliding_baseline_experiment_configs()
+    # _generate_dkgreedy_parameter_optimization_configs()
+    # _generate_push_mpts_parameter_optimization_experiment_configs()
+    # _generate_cdkegreedy_parameter_optimization_experiment_configs()
+    # _generate_cpush_mpts_parameter_optimization_experiment_configs()
+    # _generate_dkegreedy_wrong_domainknowledge_configs()
+    # _generate_push_mpts_wrong_domainknowledge_configs()
+    # _generate_static_network_mpts_configs()
+    # _generate_dynamic_network_mpts_configs()
+    # _generate_random_network_mpts_configs()
 
 
 def _write_config_for_params(
@@ -264,7 +265,8 @@ def _write_config_for_params(
         dict,
         name: str
 ):
-    name = "%s_%s_L_%d_wsi_%d_ws_%d" % (name, 'seq' if s else 'con', L, wsi, ws)
+    name = "%s_%s_L_%d_wsi_%d_ws_%d" % (
+        name, 'seq' if s else 'con', L, wsi, ws)
 
     config_for_this_round = set_window_size_and_step_in_context_path(
         {'seed': seed, 'L': L, 'policies': policies}, s, wsi, ws)
@@ -313,29 +315,54 @@ def _generate_baseline_experiment_configs():
     ]
 
     policies.extend(get_cross_validated_policies(
-        {'name': 'egreedy'}, {'epsilon': [0.0, 0.01, 0.05, 0.1, 0.2]}))
+        {'name': 'egreedy'},
+        {'epsilon': [0, 0.1, 0.2]}
+    ))
 
-    solvers = ['liblinear', 'lbfgs', 'newton-cg', 'sag', 'saga']
     policies.extend(get_cross_validated_policies(
         {
-            'name': 'cb-egreedy',
-            'batch_size': 50,
+            'name': 'cb-full-model',
+            'algorithm': 'egreedy',
             'epsilon': 0.1,
-            'max_iter': 100,
             'context_path': global_config.DATA_DIR
             + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
             'context_identifier': 'workload'
-        }, {'solver': solvers}))
+        },
+        {'name': ['cb-full-model', 'cb-streaming-model']}
+    ))
 
     policies.extend(get_cross_validated_policies(
         {
-            'name': 'cb-egreedy',
-            'batch_size': 50,
-            'epsilon': 0.1,
-            'context_identifier': 'empty'
-        }, {'solver': solvers}))
+            'algorithm': 'bootstrapped_ucb',
+            'context_path': global_config.DATA_DIR
+            + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
+            'context_identifier': 'workload'
+        },
+        {'name': ['cb-full-model', 'cb-streaming-model']}
+    ))
 
     _write_configs_for_policies(policies, name='baselines')
+
+
+def _generate_sliding_baseline_experiment_configs():
+    policies = [{'name': 'mpts'}]
+
+    policies.extend(get_cross_validated_policies(
+        {'name': 'mpts'},
+        {'sliding_window_size': [10, 100, 250, 500, 1000]}
+    ))
+
+    policies.extend(get_cross_validated_policies(
+        {'name': 'egreedy'},
+        {'sliding_window_size': [10, 100, 250, 500, 1000]}
+    ))
+
+    policies.extend(get_cross_validated_policies(
+        {'name': 'egreedy'},
+        {'epsilon': [0.0, 0.1, 0.2]}
+    ))
+
+    _write_configs_for_policies(policies, name='sliding_baselines')
 
 
 def _generate_dkgreedy_parameter_optimization_configs():
@@ -346,10 +373,11 @@ def _generate_dkgreedy_parameter_optimization_configs():
 
     policies.extend(get_cross_validated_policies(
         {'name': 'dkgreedy'}, {
-            'epsilon': [0.0, 0.01, 0.05, 0.1, 0.2],
+            'epsilon': [0.0, 0.1, 0.2],
             'init_ev_temporal_correlated_arms': [0.8, 0.9, 1.0],
             'init_ev_likely_arms': [0.8, 0.9, 1.0],
-            'init_ev_unlikely_arms': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 1.0]
+            'init_ev_unlikely_arms': [0.0, 0.2, 0.5, 1.0],
+            'sliding_window_size': [10, 100, 250, 500, 1000]
         }))
 
     _write_configs_for_policies(
@@ -361,19 +389,30 @@ def _generate_push_mpts_parameter_optimization_experiment_configs():
         {'name': 'mpts'}
     ]
 
+    # policies.extend(
+    #     get_cross_validated_policies(
+    #         {'name': 'push-mpts'},
+    #         {
+    #             'push_temporal_correlated_arms': [0.0, 0.1, 0.5, 1, 2, 5, 10],
+    #             'push_likely_arms': [0.0, 0.1, 0.5, 1, 2, 5, 10],
+    #             'push_unlikely_arms': [0.0, 0.1, 0.5, 1, 2, 5, 10],
+    #         }
+    #     )
+    # )
+
     policies.extend(
         get_cross_validated_policies(
             {'name': 'push-mpts'},
             {
-                'push_temporal_correlated_arms': [0.0, 0.1, 0.5, 1, 2, 5, 10],
-                'push_likely_arms': [0.0, 0.1, 0.5, 1, 2, 5, 10],
-                'push_unlikely_arms': [0.0, 0.1, 0.5, 1, 2, 5, 10]
+                'push_temporal_correlated_arms': [0.0, 1, 5, 10],
+                'push_unlikely_arms': [0.0, 1, 5, 10],
+                'sliding_window_size': [10, 100, 250, 500, 1000]
             }
         )
     )
 
     _write_configs_for_policies(
-        policies, name='parameter_optimization_push_mpts'
+        policies, name='parameter_optimization_sw_push_mpts'
     )
 
 

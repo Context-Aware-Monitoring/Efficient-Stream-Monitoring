@@ -11,7 +11,7 @@ from datetime import datetime
 import yaml
 import numpy as np
 import pandas as pd
-from models.policy import RandomPolicy, EGreedy, MPTS, DKEGreedy, PushMPTS, CPushMpts, CDKEGreedy, EGreedyCB, InvertedPushMPTS, StaticNetworkMPTS, RandomNetworkMPTS, DynamicNetworkMPTS
+from models.policy import RandomPolicy, EGreedy, MPTS, DKEGreedy, PushMPTS, CPushMpts, CDKEGreedy, CBFullModel, InvertedPushMPTS, StaticNetworkMPTS, RandomNetworkMPTS, DynamicNetworkMPTS, CBStreamingModel
 
 DATA_DIR = '%s/data' % dirname(dirname(abspath(__file__)))
 SERIALIZATION_DIR = '%s/processed/experiment_results/' % DATA_DIR
@@ -186,9 +186,12 @@ class Experiment:
                 elif name == 'cpush-mpts':
                     self._policies[current_run].append(
                         CPushMpts(self._L, self._reward_df, self._seed, context, **config_for_policy))
-                elif name == 'cb-egreedy':
+                elif name == 'cb-full-model':
                     self._policies[current_run].append(
-                        EGreedyCB(self._L, self._reward_df, self._seed, context, **config_for_policy))
+                        CBFullModel(self._L, self._reward_df, self._seed, context, **config_for_policy))
+                elif name == 'cb-streaming-model':
+                    self._policies[current_run].append(
+                        CBStreamingModel(self._L, self._reward_df, self._seed, context, **config_for_policy))
 
                 self._seed += 1
 
