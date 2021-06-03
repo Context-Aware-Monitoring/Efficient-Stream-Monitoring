@@ -886,8 +886,7 @@ class CBStreamingModel(CBAbstractBandit):
                         self._L
                     ),
                     self._picked_arms.flatten(),
-                    self._received_rewards.flatten(),
-                    warm_start=True
+                    self._received_rewards.flatten()
                 )
 
             self._picked_arms = np.zeros(
