@@ -51,7 +51,7 @@ class AbstractBandit(ABC):
         self._sliding_window_size = sliding_window_size
         if sliding_window_size is not None:
             self._sliding_window_index = 0
-            
+
         self._identifier = identifier
 
     @property
@@ -102,11 +102,11 @@ class AbstractBandit(ABC):
             self._init_sliding_window()
         for _ in range(0, self._T):
             self._pick_arms()
-            
+
             if self._sliding_window_size is not None:
                 self._update_sliding_window()
                 self._sliding_window_index += 1
-                self._sliding_window_index %= self._sliding_window_size            
+                self._sliding_window_index %= self._sliding_window_size
             self._learn()
 
             max_reward_this_round = np.sort(
@@ -121,7 +121,7 @@ class AbstractBandit(ABC):
         """Initializes the required data structures if a sliding window is
         used."""
         pass
-            
+
     @abstractmethod
     def _pick_arms(self):
         """Picks arms for the current round and saves them to self._picked_arms"""
@@ -135,7 +135,7 @@ class AbstractBandit(ABC):
     def _update_sliding_window(self):
         """Updates the data structures of the sliding window"""
         pass
-    
+
     @property
     @abstractmethod
     def name(self) -> str:
@@ -211,24 +211,27 @@ class EGreedy(AbstractBandit):
 
         return '%sgreedy' % sw_string
 
-
     def _init_sliding_window(self):
-        self._sliding_arm_played = np.zeros((self._sliding_window_size, self._K),dtype=bool)
+        self._sliding_arm_played = np.zeros(
+            (self._sliding_window_size, self._K), dtype=bool)
         self._sliding_reward = np.zeros((self._sliding_window_size, self._K))
 
-
     def _update_sliding_window(self):
-        arm_played_window_size_iterations_ago = self._sliding_arm_played[self._sliding_window_index, :]
+        arm_played_window_size_iterations_ago = self._sliding_arm_played[
+            self._sliding_window_index, :]
         self._num_plays -= arm_played_window_size_iterations_ago
-        self._sum_reward[arm_played_window_size_iterations_ago] -= self._sliding_reward[self._sliding_window_index, arm_played_window_size_iterations_ago]
+        self._sum_reward[arm_played_window_size_iterations_ago] -= self._sliding_reward[self._sliding_window_index,
+                                                                                        arm_played_window_size_iterations_ago]
 
-        self._sliding_arm_played[self._sliding_window_index, :] = np.zeros(self._K, dtype=bool)
+        self._sliding_arm_played[self._sliding_window_index, :] = np.zeros(
+            self._K, dtype=bool)
         self._sliding_reward[self._sliding_window_index, :] = np.zeros(self._K)
-        
-        self._sliding_arm_played[self._sliding_window_index, self._picked_arms_indicies] = True
-        self._sliding_reward[self._sliding_window_index, self._picked_arms_indicies] = self._reward_df.values[self._iteration, self._picked_arms_indicies]
-        
-    
+
+        self._sliding_arm_played[self._sliding_window_index,
+                                 self._picked_arms_indicies] = True
+        self._sliding_reward[self._sliding_window_index,
+                             self._picked_arms_indicies] = self._reward_df.values[self._iteration, self._picked_arms_indicies]
+
     def _pick_arms(self):
         """Picks arms. Performs an exploration step with probability epsilon
         and an exploitation step with probability 1-epsilon.
@@ -248,11 +251,15 @@ class EGreedy(AbstractBandit):
         expected value for the arms.
         """
         self._num_plays[self._picked_arms_indicies] += 1
-        self._sum_reward[self._picked_arms_indicies] += self._reward_df.values[self._iteration, self._picked_arms_indicies]
+        self._sum_reward[self._picked_arms_indicies] += self._reward_df.values[self._iteration,
+                                                                               self._picked_arms_indicies]
 
-        self._expected_values[self._num_plays > 0] = self._sum_reward[self._num_plays > 0] / self._num_plays[self._num_plays > 0]
-        self._expected_values[self._num_plays == 0] = self._init_expected_values[self._num_plays == 0]
-        
+        self._expected_values[self._num_plays > 0] = self._sum_reward[self._num_plays >
+                                                                      0] / self._num_plays[self._num_plays > 0]
+        self._expected_values[self._num_plays ==
+                              0] = self._init_expected_values[self._num_plays == 0]
+
+
 class DKEGreedy(EGreedy):
     """E-Greedy bandit algorithm using domain knowledge to set the initial
     expected reward and exclude arms from exploration. Initial reward of arms
@@ -283,14 +290,14 @@ class DKEGreedy(EGreedy):
           init_ev_unlikely_arms (float): The other arms will receive this value
           as intial expected value.
         """
-        super().__init__(L, reward_df, random_seed, epsilon, sliding_window_size, identifier=identifier)
+        super().__init__(L, reward_df, random_seed, epsilon,
+                         sliding_window_size, identifier=identifier)
         self._arm_knowledge = ArmKnowledge(self._arms, control_host)
         self._init_ev_temporal_correlated_arms = init_ev_temporal_correlated_arms
         self._init_ev_likely_arms = init_ev_likely_arms
         self._init_ev_unlikely_arms = init_ev_unlikely_arms
         self._init_expected_values = self._get_init_ev()
         self._expected_values = self._init_expected_values
-
 
     def _get_init_ev(self):
         """Intializes the expected value for the arms. An arm is a pair of
@@ -311,7 +318,6 @@ class DKEGreedy(EGreedy):
         expected_values[self._arm_knowledge.arm_has_temporal_correlation] = self._init_ev_temporal_correlated_arms
 
         return expected_values
-
 
     def explore_arms(self):
         """Performs an exploration step but never exploration arms that we know
@@ -468,7 +474,7 @@ class MPTS(AbstractBandit):
     def _init_sliding_window(self):
         self._sliding_alpha = np.zeros((self._sliding_window_size, self._K))
         self._sliding_beta = np.zeros((self._sliding_window_size, self._K))
-    
+
     def _pick_arms(self):
         """For each arm a random value gets drawn according to its beta
         distribution. The arms that have the highest L random values get
@@ -496,8 +502,11 @@ class MPTS(AbstractBandit):
 
         self._sliding_alpha[self._sliding_window_index, :] = np.zeros(self._K)
         self._sliding_beta[self._sliding_window_index, :] = np.zeros(self._K)
-        self._sliding_alpha[self._sliding_window_index, self._picked_arms_indicies] = reward_this_round
-        self._sliding_beta[self._sliding_window_index, self._picked_arms_indicies] = 1 - reward_this_round
+        self._sliding_alpha[self._sliding_window_index,
+                            self._picked_arms_indicies] = reward_this_round
+        self._sliding_beta[self._sliding_window_index,
+                           self._picked_arms_indicies] = 1 - reward_this_round
+
 
 class PushMPTS(MPTS):
     """Variant of the MPTS where domain knowledge is used to set the initial
@@ -517,7 +526,7 @@ class PushMPTS(MPTS):
                  push_unlikely_arms: float = 1.0,
                  push_temporal_correlated_arms: float = 1.0,
                  control_host: str = 'wally113',
-                 sliding_window_size: int=None,
+                 sliding_window_size: int = None,
                  identifier: typing.Optional[str] = None
                  ):
         """Constructs the Push Mpts algorithm.
@@ -530,7 +539,8 @@ class PushMPTS(MPTS):
           the initial posterior distribution.
           control_host (string): Name of the control host
         """
-        super().__init__(L, reward_df, random_seed, sliding_window_size, identifier=identifier)
+        super().__init__(L, reward_df, random_seed,
+                         sliding_window_size, identifier=identifier)
         self._arm_knowledge = ArmKnowledge(self._arms, control_host)
 
         self._push_temporal_correlated_arms = push_temporal_correlated_arms
@@ -620,7 +630,8 @@ class CPushMpts(PushMPTS):
         super().__init__(L, reward_df, random_seed, push_likely_arms,
                          push_unlikely_arms, push_temporal_correlated_arms,
                          control_host, sliding_window_size, identifier=identifier)
-        self._arm_knowledge = PushArmKnowledge(self._arms, one_active_host_sufficient_for_push, control_host)
+        self._arm_knowledge = PushArmKnowledge(
+            self._arms, one_active_host_sufficient_for_push, control_host)
         self._context_df = context_df
         self._cpush = cpush
         self._max_number_pushes = q
@@ -659,7 +670,7 @@ class CPushMpts(PushMPTS):
 
 
 class CBAbstractBandit(AbstractBandit):
-    
+
     def __init__(
             self,
             L: int,
@@ -681,17 +692,17 @@ class CBAbstractBandit(AbstractBandit):
 
         self._base_algorithm_name = base_algorithm_name
         self._algorithm_name = algorithm_name
-        
+
         self._context_identifier = context_identifier
         self._identifier = identifier
-            
+
         self._rnd = np.random.RandomState(random_seed)
 
         self._batch_size = batch_size
 
         self._scaler = StandardScaler()
-        self._scaler.fit(self._context_df.values[np.random.choice(self._T, self._K),:])
-            
+        self._scaler.fit(
+            self._context_df.values[np.random.choice(self._T, self._K), :])
 
     def _create_algorithm(self, base_algorithm, batch_train: bool, **kwargs):
         if self._algorithm_name == 'egreedy':
@@ -699,19 +710,19 @@ class CBAbstractBandit(AbstractBandit):
                 base_algorithm,
                 nchoices=self._K,
                 random_state=self._rnd.randint(1000),
-                explore_prob=kwargs.get('epsilon',0.1),
-                batch_train = batch_train
+                explore_prob=kwargs.get('epsilon', 0.1),
+                batch_train=batch_train
             )
         elif algorithm == 'bootstrapped_ucb':
             self._algorithm = BootstrappedUCB(
                 base_algorithm,
                 nchoices=self._K,
                 random_state=self._rnd.randint(1000),
-                batch_train = batch_train
+                batch_train=batch_train
             )
         else:
             sys.exit("no such algorithm: %s" % algorithm)
-    
+
 
 class CBFullModel(CBAbstractBandit):
     """Epsilon Greedy Contextual Bandit baseline algorithm from the
@@ -732,28 +743,34 @@ class CBFullModel(CBAbstractBandit):
             identifier: typing.Optional[str] = None,
             **kwargs
     ):
-        super().__init__(L, reward_df, random_seed, context_df, base_algorithm_name, algorithm_name, batch_size, scaler_sample_size, context_identifier, identifier)
+        super().__init__(L, reward_df, random_seed, context_df, base_algorithm_name,
+                         algorithm_name, batch_size, scaler_sample_size, context_identifier, identifier)
 
         self._picked_arms = np.zeros((self._T, self._L))
         self._received_rewards = np.zeros((self._T, self._L))
-        
+
         if self._base_algorithm_name == 'logistic_regression':
-            base_algorithm = LogisticRegression(solver=kwargs.get('solver', 'lbfgs'), warm_start=True, max_iter=kwargs.get('max_iter', 100))
+            base_algorithm = LogisticRegression(solver=kwargs.get(
+                'solver', 'lbfgs'), warm_start=True, max_iter=kwargs.get('max_iter', 100))
         else:
-            sys.exit("no such a base algorithm: %s " % self._base_algorithm_name)
+            sys.exit("no such a base algorithm: %s " %
+                     self._base_algorithm_name)
 
         self._create_algorithm(base_algorithm, False, **kwargs)
 
     def _pick_arms(self):
         # Picks for the next batch size
         if self._iteration <= self._batch_size:  # model not fitted yet, pick random arms
-            random_arm_indicies = self._rnd.choice(self._K, size=self._L, replace=False)
+            random_arm_indicies = self._rnd.choice(
+                self._K, size=self._L, replace=False)
             self._picked_arms_indicies = random_arm_indicies
         else:
-            self._picked_arms_indicies = (self._algorithm.topN(self._context_df.values[self._iteration, :], self._L)[0])
+            self._picked_arms_indicies = (self._algorithm.topN(
+                self._context_df.values[self._iteration, :], self._L)[0])
 
         self._picked_arms[self._iteration] = self._picked_arms_indicies
-        self._received_rewards[self._iteration, :] = self._reward_df.values[self._iteration, self._picked_arms_indicies]
+        self._received_rewards[self._iteration,
+                               :] = self._reward_df.values[self._iteration, self._picked_arms_indicies]
 
     def _learn(self):
         # (re)fit model
@@ -761,7 +778,8 @@ class CBFullModel(CBAbstractBandit):
             if self._iteration == self._batch_size:
                 self._algorithm.fit(
                     repeat_entry_L_times(
-                        self._scaler.transform(self._context_df.values[: self._batch_size, :]),
+                        self._scaler.transform(
+                            self._context_df.values[: self._batch_size, :]),
                         self._L
                     ),
                     self._picked_arms[: self._batch_size, :].flatten(),
@@ -770,12 +788,13 @@ class CBFullModel(CBAbstractBandit):
             else:
                 self._algorithm.fit(
                     repeat_entry_L_times(
-                        self._scaler.transform(self._context_df.values[:self._iteration, :]),
+                        self._scaler.transform(
+                            self._context_df.values[:self._iteration, :]),
                         self._L
                     ),
                     self._picked_arms[: self._iteration, :].flatten(),
                     self._received_rewards[: self._iteration, :].flatten(),
-                    warm_start = True
+                    warm_start=True
                 )
 
     @property
@@ -783,14 +802,15 @@ class CBFullModel(CBAbstractBandit):
         if self._identifier is not None:
             return self._identifier
 
-        name = 'cb-full-model-%s-%s_b_%d' % (self._base_algorithm_name, self._algorithm_name, self._batch_size,)
+        name = 'cb-full-model-%s-%s_b_%d' % (
+            self._base_algorithm_name, self._algorithm_name, self._batch_size,)
 
         if self._algorithm_name == 'egreedy':
             name = '%s_e_%.2f' % (name, self._algorithm.explore_prob)
-        
+
         return name
 
-        
+
 class CBStreamingModel(CBAbstractBandit):
     """Contextual bandit using batches to refit models periodically."""
 
@@ -814,11 +834,13 @@ class CBStreamingModel(CBAbstractBandit):
 
         self._picked_arms = np.zeros((batch_size, L))
         self._received_rewards = np.zeros((batch_size, L))
-        
+
         if self._base_algorithm_name == 'linear_regression':
-            base_algorithm = LinearRegression(lambda_=10.,fit_intercept=True, method='sm')
+            base_algorithm = LinearRegression(
+                lambda_=10., fit_intercept=True, method='sm')
         elif self._base_algorithm_name == 'sgd_classifier':
-            base_algorithm = SGDClassifier(random_state=self._rnd.randint(1000), loss='log', warm_start=False)
+            base_algorithm = SGDClassifier(
+                random_state=self._rnd.randint(1000), loss='log', warm_start=False)
         else:
             sys.exit("no such base algorithm: %s" % self._base_algorithm_name)
 
@@ -847,7 +869,9 @@ class CBStreamingModel(CBAbstractBandit):
             if self._iteration == self._batch_size:
                 self._algorithm.fit(
                     repeat_entry_L_times(
-                        self._scaler.transform(self._context_df.values[: self._batch_size, :])
+                        self._scaler.transform(
+                            self._context_df.values[: self._batch_size, :]),
+                        self._L
                     ),
                     self._picked_arms.flatten(),
                     self._received_rewards.flatten()
@@ -876,13 +900,15 @@ class CBStreamingModel(CBAbstractBandit):
         if self._identifier is not None:
             return self._identifier
 
-        name = 'cb-streaming-model-%s-%s_b_%d' % (self._base_algorithm_name, self._algorithm_name, self._batch_size,)
+        name = 'cb-streaming-model-%s-%s_b_%d' % (
+            self._base_algorithm_name, self._algorithm_name, self._batch_size,)
 
         if self._algorithm_name == 'egreedy':
             name = '%s_e_%.2f' % (name, self._algorithm.explore_prob)
-        
+
         return name
-        
+
+
 class InvertedPushMPTS(PushMPTS):
     """Policy that simulates wrong domain knowledge by inverting the pushes.
     Likely arms get a push in the posterior, while unlikely arms get a push in
