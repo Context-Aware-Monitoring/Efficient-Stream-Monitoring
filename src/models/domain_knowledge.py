@@ -251,8 +251,9 @@ class GraphArmKnowledge(DynamicArmKnowledge):
 
     edges: np.ndarray
 
-    def __init__(self, arms: np.ndarray, control_host: str = 'wally113'):
+    def __init__(self, arms: np.ndarray, weight: float = 0.5, control_host: str = 'wally113'):
         super().__init__(arms, control_host)
+        self._weight = weight
         self._edges = self._compute_edges()
 
     def _compute_edges(self):
@@ -297,11 +298,16 @@ class GraphArmKnowledge(DynamicArmKnowledge):
 
         np.fill_diagonal(arms_match, False)
 
-        return arms_match
+        return arms_match * self._weight
 
     def recompute_properties(self):
         self._edges = self._compute_edges()
 
+
+    @property
+    def weight(self) -> float:
+        return self._weight
+    
     @property
     def edges(self) -> np.ndarray:
         """Returns an adjaceny matrix of size self._K * self._K. Arms i and j
@@ -309,12 +315,57 @@ class GraphArmKnowledge(DynamicArmKnowledge):
         """
         return self._edges
 
+    @property
+    def name(self):
+        return '%.1f-correct-gk' % self._weight
 
+class WrongGraphArmknowledge(GraphArmKnowledge):
+
+    def __init__(self, arms: np.ndarray, weight: float = 0.5, control_host: str = 'wally113', percentage_right_edge_removal=0.5,percentage_wrong_edge_insertion=0.5):
+        self._percentage_right_edge_removal = percentage_right_edge_removal
+        self._percentage_wrong_edge_insertion = percentage_wrong_edge_insertion
+        super().__init__(arms, weight, control_host)
+
+
+    def _compute_edges(self):
+        original_edges = super()._compute_edges()
+        edges = original_edges
+        
+        nodes_has_neighbors = (edges != 0.0).any(axis=1)
+        canidates_indicies_for_edge_removal = np.arange(self._K)[nodes_has_neighbors]
+        indicies_right_edge_removal = np.random.choice(canidates_indicies_for_edge_removal, int(len(canidates_indicies_for_edge_removal) * self._percentage_right_edge_removal), replace=False)
+
+        edges[indicies_right_edge_removal] = 0.0
+        edges[:, indicies_right_edge_removal] = 0.0
+        
+
+        node_ids_for_wrong_edge_insertion = np.random.choice(self._K, int(self._K * self._percentage_wrong_edge_insertion))
+        indicies_wrong_edge_insertion, count_of_edges = np.unique(node_ids_for_wrong_edge_insertion, return_counts=True)
+
+        for cid,cc in zip(indicies_wrong_edge_insertion,count_of_edges):
+            possible_indicies = np.arange(self._K)[np.logical_and(original_edges[cid, :] == False, edges[cid, :] == False)]
+            new_neighbors_indicies = np.random.choice(possible_indicies, cc, replace=True)
+            
+            is_neighbor = (original_edges[new_neighbors_indicies,:].sum(axis=0) > 0)
+            is_neighbor[new_neighbors_indicies] = True
+            edges[cid, :] = is_neighbor * self._weight
+            edges[:, cid] = is_neighbor * self._weight
+        
+
+        assert (edges == edges.T).all()
+
+        return edges
+
+    @property
+    def name(self):
+        return '%.1f/%.1f-%.1f-wrong-gk' % (self._percentage_right_edge_removal, self._percentage_wrong_edge_insertion, self._weight)
+
+        
 class RandomGraphKnowledge(Knowledge):
 
     edges: np.ndarray
 
-    def __init__(self, K: int, weight: float, probability_neighbors: List[float], seed: int):
+    def __init__(self, K: int, weight: float=0.5, probability_neighbors: List[float]=[0.4, 0.15, 0.15, 0.15, 0.15], seed: int=0):
         self._K = K
         self._weight = weight
         self._probability_neighbors = probability_neighbors
