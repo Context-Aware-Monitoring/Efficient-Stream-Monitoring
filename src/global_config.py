@@ -26,8 +26,5 @@ END_TRACES_CONCURRENT = np.datetime64('2019-11-25 19:45:00')
 
 SLIDING_WINDOW_SIZES = [None, 10, 100, 250, 500]
 GRAPH_DOMAIN_KNOWLEDGES = [{'name':'correct', 'weight': weight} for weight in [0.2,0.5,0.8,1.0]]
+GRAPH_DOMAIN_KNOWLEDGES.extend([{'name' : 'wrong', 'weight' : weight, 'percentage_right_edge_removal' : percentage_right_edge_removal, 'percentage_wrong_edge_insertion' : percentage_wrong_edge_insertion} for weight, percentage_right_edge_removal, percentage_wrong_edge_insertion in product([0.2,0.5,0.8,1.0],[0.1,0.2,0.3,0.4,0.5], [0.1,0.2,0.3,0.4,0.5])])
 GRAPH_DOMAIN_KNOWLEDGES.append(None)
-
-WRONG_GRAPH_DOMAIN_KNOWLEDGES = [
-    {'name' : 'wrong', 'weight' : weight, 'percentage_right_edge_removal' : percentage_right_edge_removal, 'percentage_wrong_edge_insertion' : percentage_wrong_edge_insertion} for weight, percentage_right_edge_removal, percentage_wrong_edge_insertion in product([0.2,0.5,0.8,1.0],[0.1,0.2,0.3,0.4,0.5], [0.1,0.2,0.3,0.4,0.5])]
-WRONG_GRAPH_DOMAIN_KNOWLEDGES.append(None)

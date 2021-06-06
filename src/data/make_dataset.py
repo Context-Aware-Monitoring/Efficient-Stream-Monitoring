@@ -242,17 +242,53 @@ def _write_experiment_config(config: dict, name: str):
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
-    _generate_baseline_experiment_configs()
-    # _generate_sliding_baseline_experiment_configs()
-    # _generate_dkgreedy_parameter_optimization_configs()
-    # _generate_push_mpts_parameter_optimization_experiment_configs()
-    # _generate_cdkegreedy_parameter_optimization_experiment_configs()
-    # _generate_cpush_mpts_parameter_optimization_experiment_configs()
-    # _generate_dkegreedy_wrong_domainknowledge_configs()
-    # _generate_push_mpts_wrong_domainknowledge_configs()
-    # _generate_static_network_mpts_configs()
-    # _generate_dynamic_network_mpts_configs()
-    # _generate_random_network_mpts_configs()
+
+    policies = []
+
+    policies.extend(get_cross_validated_policies(
+        {'name': 'mpts'},
+        {
+            'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
+            'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
+        }
+    ))
+
+    policies.extend(get_cross_validated_policies(
+        {'name': 'egreedy'},
+        {
+            'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
+            'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES,
+            'epsilon' : [0.0, 0.1, 0.2]
+        }
+    ))
+
+    policies.extend(
+        get_cross_validated_policies(
+            {'name': 'dkgreedy'},
+            {
+                'epsilon': [0.0, 0.1, 0.2],
+                'init_ev_temporal_correlated_arms': [0.8, 1.0],
+                'init_ev_likely_arms': [0.8, 1.0],
+                'init_ev_unlikely_arms': [0.3, 0.5],
+                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
+                'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
+           } 
+        )
+    )
+
+    policies.extend(
+        get_cross_validated_policies(
+            {'name': 'push-mpts', 'push_likely_arms' : 0.0,},
+            {
+                'push_temporal_correlated_arms': [0.0, 1.0],
+                'push_unlikely_arms': [5, 10],
+                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
+                'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
+            }
+        )
+    )
+
+    _write_configs_for_policies(policies)    
 
 
 def _write_config_for_params(
@@ -307,266 +343,6 @@ def _write_configs_for_policies(policies, name=''):
             policies,
             name
         )
-
-
-def _generate_baseline_experiment_configs():
-    policies = [
-        {'name': 'mpts'}
-    ]
-
-    policies.extend(get_cross_validated_policies(
-        {'name': 'egreedy'},
-        {'epsilon': [0, 0.1, 0.2]}
-    ))
-
-    policies.extend(get_cross_validated_policies(
-        {
-            'name': 'cb-full-model',
-            'algorithm': 'egreedy',
-            'epsilon': 0.1,
-            'context_path': global_config.DATA_DIR
-            + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
-            'context_identifier': 'workload'
-        },
-        {'name': ['cb-full-model', 'cb-streaming-model']}
-    ))
-
-    policies.extend(get_cross_validated_policies(
-        {
-            'algorithm': 'bootstrapped_ucb',
-            'context_path': global_config.DATA_DIR
-            + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
-            'context_identifier': 'workload'
-        },
-        {'name': ['cb-full-model', 'cb-streaming-model']}
-    ))
-
-    _write_configs_for_policies(policies, name='baselines')
-
-
-def _generate_sliding_baseline_experiment_configs():
-    policies = [{'name': 'mpts'}]
-
-    policies.extend(get_cross_validated_policies(
-        {'name': 'mpts'},
-        {'sliding_window_size': [10, 100, 250, 500, 1000]}
-    ))
-
-    policies.extend(get_cross_validated_policies(
-        {'name': 'egreedy'},
-        {'sliding_window_size': [10, 100, 250, 500, 1000]}
-    ))
-
-    policies.extend(get_cross_validated_policies(
-        {'name': 'egreedy'},
-        {'epsilon': [0.0, 0.1, 0.2]}
-    ))
-
-    _write_configs_for_policies(policies, name='sliding_baselines')
-
-
-def _generate_dkgreedy_parameter_optimization_configs():
-    policies = [
-        {'name': 'egreedy', 'epsilon': 0.1},
-        {'name': 'egreedy'},
-    ]
-
-    policies.extend(get_cross_validated_policies(
-        {'name': 'dkgreedy'}, {
-            'epsilon': [0.0, 0.1, 0.2],
-            'init_ev_temporal_correlated_arms': [0.8, 0.9, 1.0],
-            'init_ev_likely_arms': [0.8, 0.9, 1.0],
-            'init_ev_unlikely_arms': [0.0, 0.2, 0.5, 1.0],
-            'sliding_window_size': [10, 100, 250, 500, 1000]
-        }))
-
-    _write_configs_for_policies(
-        policies, name='parameter_optimization_dkgreedy')
-
-
-def _generate_push_mpts_parameter_optimization_experiment_configs():
-    policies = [
-        {'name': 'mpts'}
-    ]
-
-    # policies.extend(
-    #     get_cross_validated_policies(
-    #         {'name': 'push-mpts'},
-    #         {
-    #             'push_temporal_correlated_arms': [0.0, 0.1, 0.5, 1, 2, 5, 10],
-    #             'push_likely_arms': [0.0, 0.1, 0.5, 1, 2, 5, 10],
-    #             'push_unlikely_arms': [0.0, 0.1, 0.5, 1, 2, 5, 10],
-    #         }
-    #     )
-    # )
-
-    policies.extend(
-        get_cross_validated_policies(
-            {'name': 'push-mpts'},
-            {
-                'push_temporal_correlated_arms': [0.0, 1, 5, 10],
-                'push_unlikely_arms': [0.0, 1, 5, 10],
-                'sliding_window_size': [10, 100, 250, 500, 1000]
-            }
-        )
-    )
-
-    _write_configs_for_policies(
-        policies, name='parameter_optimization_sw_push_mpts'
-    )
-
-
-def _generate_cdkegreedy_parameter_optimization_experiment_configs():
-    policies = [
-        {'name': 'egreedy', 'epsilon': 0.1},
-        {'name': 'greedy'}
-    ]
-
-    policies.extend(
-        get_cross_validated_policies(
-            {
-                'name': 'cdkegreedy',
-                'context_path':
-                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
-                'push_kind': 'plus'
-            },
-            {
-                'epsilon': [0, 0.1],
-                'init_ev_likely_arms': [0.8, 0.9],
-                'init_ev_unlikely_arms': [0.2],
-                'init_ev_temporal_correlated_arms': [0.8, 1.0],
-                'push': [0.01, 0.05, 0.1, 0.25, 0.5],
-                'max_number_pushes': [5, 10, 20, 100],
-                'one_active_host_sufficient_for_push': [True, False]
-            }
-        )
-    )
-
-    policies.extend(
-        get_cross_validated_policies(
-            {
-                'name': 'cdkegreedy',
-                'context_path':
-                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
-                'push_kind': 'multiply'
-            },
-            {
-                'epsilon': [0, 0.1],
-                'init_ev_likely_arms': [0.8, 0.9],
-                'init_ev_unlikely_arms': [0.2],
-                'init_ev_temporal_correlated_arms': [0.8, 1.0],
-                'push': [1.05, 1.1, 1.2, 1.5],
-                'max_number_pushes': [5, 10, 20, 100],
-                'one_active_host_sufficient_for_push': [True, False]
-            }
-        )
-    )
-
-    _write_configs_for_policies(
-        policies, name='parameter_optimization_cdkegreedy')
-
-
-def _generate_dkegreedy_wrong_domainknowledge_configs():
-    policies = [
-        {'name': 'egreedy', 'epsilon': 0.1},
-        {'name': 'greedy'}
-    ]
-
-    policies.extend(
-        get_cross_validated_policies(
-            {'name': 'dkgreedy'},
-            {
-                'epsilon': [0, 0.01, 0.05, 0.1, 0.2],
-                'init_ev_likely_arms': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
-                'init_ev_unlikely_arms': [0.8, 0.9, 1.0],
-                'init_ev_temporal_correlated_arms': [0.0, 0.2, 0.4],
-            }
-        )
-    )
-
-    _write_configs_for_policies(policies, name="dkegreedy_wrong_dk")
-
-
-def _generate_push_mpts_wrong_domainknowledge_configs():
-    policies = [
-        {'name': 'mpts'}
-    ]
-
-    policies.extend(get_cross_validated_policies(
-        {'name': 'inverted-push-mpts'}, {
-            'push_likely_arms': [0.1, 0.5, 1, 2, 5, 10],
-            'push_unlikely_arms': [0.1, 0.5, 1, 2, 5, 10],
-            'push_temporal_correlated_arms': [0, 0.2, 0.4],
-        }))
-
-    _write_configs_for_policies(policies, name='push_mpts_wrong_dk')
-
-
-def _generate_static_network_mpts_configs():
-    policies = [
-        {'name': 'mpts'}
-    ]
-
-    policies.extend(
-        get_cross_validated_policies(
-            {'name': 'static-network-mpts'},
-            {'weight': [0.1, 0.25, 0.5, 0.75, 1.0]}
-        )
-    )
-
-    _write_configs_for_policies(policies, name='static_network_mpts')
-
-
-def _generate_dynamic_network_mpts_configs():
-    policies = [
-        {'name': 'mpts'}
-    ]
-
-    policies.extend(
-        get_cross_validated_policies(
-            {
-                'name': 'dynamic-network-mpts',
-                'context_path':
-                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv'
-            }, {'weight': [0.1, 0.25, 0.5, 0.75, 1.0]}
-        )
-    )
-
-    _write_configs_for_policies(policies, name='dynamic-network_mpts')
-
-
-def _generate_random_network_mpts_configs():
-    policies = [
-        {'name': 'mpts'},
-        {'name': 'random-network-mpts'}
-    ]
-
-    _write_configs_for_policies(policies, name='random_network_mpts')
-
-
-def _generate_cpush_mpts_parameter_optimization_experiment_configs():
-    policies = [{'name': 'mpts'}]
-
-    policies.extend(
-        get_cross_validated_policies(
-            {
-                'name': 'cpush-mpts',
-                'context_path': global_config.DATA_DIR
-                + '/processed/context/%s_context_host-traces_w%d_s%d.csv'
-            },
-            {
-                'push_likely_arms': [0.0, 0.5],
-                'push_unlikely_arms': [5, 10],
-                'cpush': [0.1, 1, 5, 10],
-                'q': [5, 10, 20, 100],
-                'push_temporal_correlated_arms': [1.0, 5.0],
-                'one_active_host_sufficient_for_push': [True, False]
-            }
-        )
-    )
-
-    _write_configs_for_policies(policies,
-                                name='parameter_optimization_cpush_mpts')
 
 
 if __name__ == '__main__':
