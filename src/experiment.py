@@ -11,7 +11,8 @@ from datetime import datetime
 import yaml
 import numpy as np
 import pandas as pd
-from models.policy import RandomPolicy, EGreedy, MPTS, DKEGreedy, PushMPTS, CPushMpts, CDKEGreedy, CBFullModel, InvertedPushMPTS, StaticNetworkMPTS, RandomNetworkMPTS, DynamicNetworkMPTS, CBStreamingModel
+from models.domain_knowledge import GraphArmKnowledge, RandomGraphKnowledge, WrongGraphArmknowledge
+from models.policy import RandomPolicy, EGreedy, MPTS, DKEGreedy, PushMPTS, CPushMpts, CDKEGreedy, CBFullModel, CBStreamingModel
 
 DATA_DIR = '%s/data' % dirname(dirname(abspath(__file__)))
 SERIALIZATION_DIR = '%s/processed/experiment_results/' % DATA_DIR
@@ -37,7 +38,8 @@ def _read_context_from_config(config):
 
 
 def _get_dict_of_policy_params_(config: dict):
-    policy_param_keys = set(config) - set(['name', 'context_path'])
+    policy_param_keys = set(
+        config) - set(['name', 'context_path', 'graph_knowledge'])
 
     return {key: config[key] for key in policy_param_keys}
 
@@ -141,6 +143,24 @@ class Experiment:
         self._average_regret = {}
         self._average_cum_regret = {}
 
+    def _read_graph_knowledge_from_config(self, config):
+        if 'graph_knowledge' not in config or config['graph_knowledge'] is None:
+            return None
+
+        name = config['graph_knowledge'].get('name')
+
+        if name is None:
+            return None
+
+        if name == 'correct':
+            return GraphArmKnowledge(self._reward_df.columns.values, **_get_dict_of_policy_params_(config['graph_knowledge']))
+        elif name == 'random':
+            return RandomGraphKnowledge(self._K, **_get_dict_of_policy_params_(config['graph_knowledge']))
+        elif name == 'wrong':
+            return WrongGraphArmknowledge(self._reward_df.columns.values, **_get_dict_of_policy_params_(config['graph_knowledge']))
+
+        return None
+
     def _create_policies(self, config):
         """Creates the policies based on the configuration and adds them to
         _policies.
@@ -151,7 +171,10 @@ class Experiment:
         for config_for_policy in config['policies']:
             name = config_for_policy['name']
             context = _read_context_from_config(config_for_policy)
-            config_for_policy = _get_dict_of_policy_params_(config_for_policy)
+            graph_knowledge = self._read_graph_knowledge_from_config(
+                config_for_policy)
+            config_for_policy = _get_dict_of_policy_params_(
+                config_for_policy) | {'graph_knowledge': graph_knowledge}
             for current_run in range(self._number_of_runs):
                 if name == 'random':
                     self._policies[current_run].append(RandomPolicy(
@@ -165,19 +188,10 @@ class Experiment:
                 elif name == 'push-mpts':
                     self._policies[current_run].append(
                         PushMPTS(self._L, self._reward_df, self._seed, **config_for_policy))
-                elif name == 'static-network-mpts':
-                    self._policies[current_run].append(StaticNetworkMPTS(
-                        self._L, self._reward_df, self._seed, **config_for_policy))
-                elif name == 'dynamic-network-mpts':
-                    self._policies[current_run].append(DynamicNetworkMPTS(
-                        self._L, self._reward_df, self._seed, context, **config_for_policy))
                 elif name == 'random-network-mpts':
                     self._policies[current_run].append(RandomNetworkMPTS(
                         self._L, self._reward_df, self._seed, **config_for_policy))
-                elif name == 'inverted-push-mpts':
-                    self._policies[current_run].append(InvertedPushMPTS(
-                        self._L, self._reward_df, self._seed, **config_for_policy))
-                elif name == 'dkgreedy':
+                elif name == 'dkegreedy':
                     self._policies[current_run].append(
                         DKEGreedy(self._L, self._reward_df, self._seed, **config_for_policy))
                 elif name == 'cdkegreedy':
