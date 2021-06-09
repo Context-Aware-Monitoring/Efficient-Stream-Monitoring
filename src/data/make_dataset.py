@@ -238,57 +238,73 @@ def _write_experiment_config(config: dict, name: str):
     with open('%s/%s.yml' % (global_config.EXPERIMENT_CONFIG_DIR, name), 'w') as yml_file:
         yaml.dump(config, yml_file, default_flow_style=False)
 
-
-def _generate_experiment_configs():
-    """Generates the yaml files that contain the configs of the experiments."""
-    print('Generate experiment configs')
-
+def _generate_mpts():
     policies = []
-
     policies.extend(get_cross_validated_policies(
         {'name': 'mpts'},
         {
             'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-            'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
-        }
-    ))
-
-    policies.extend(get_cross_validated_policies(
-        {'name': 'egreedy'},
-        {
-            'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-            'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES,
-            'epsilon' : [0.0, 0.1, 0.2]
+            'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES            
         }
     ))
 
     policies.extend(
         get_cross_validated_policies(
-            {'name': 'dkgreedy'},
+            {'name': 'push-mpts', 'push_likely_arms' : 0.0, 'push_temporal_correlated_arms' : 1.0, 'push_unlikely_arms': 10},
             {
-                'epsilon': [0.0, 0.1, 0.2],
-                'init_ev_temporal_correlated_arms': [0.8, 1.0],
-                'init_ev_likely_arms': [0.8, 1.0],
-                'init_ev_unlikely_arms': [0.3, 0.5],
                 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-                'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
-           } 
-        )
-    )
-
-    policies.extend(
-        get_cross_validated_policies(
-            {'name': 'push-mpts', 'push_likely_arms' : 0.0,},
-            {
-                'push_temporal_correlated_arms': [0.0, 1.0],
-                'push_unlikely_arms': [5, 10],
-                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-                'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
+                'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES                
             }
         )
     )
 
-    _write_configs_for_policies(policies)    
+    _write_configs_for_policies(policies, name='mpts')    
+
+def _generate_egreedy():
+    policies = []
+    policies.extend(get_cross_validated_policies(
+        {'name': 'egreedy'},
+        {
+            'epsilon' : [0.0, 0.1, 0.2],
+            'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES,
+            'sliding_window_size' : global_config.SLIDING_WINDOW_SIZES
+        }
+    ))
+
+    policies.extend(
+        get_cross_validated_policies(
+            {'name': 'dkegreedy', 'init_ev_temporal_correlated_arms': 1.0, 'init_ev_likely_arms' : 0.8, 'init_ev_unlikely_arms': 0.5},
+            {
+                'epsilon': [0.0, 0.1, 0.2],
+                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES,
+                'sliding_window_size' : global_config.SLIDING_WINDOW_SIZES                
+
+           } 
+        )
+    )
+
+
+    _write_configs_for_policies(policies, name='egreedy')    
+
+def _generate_cb():
+    policies = [
+        {'name': 'cb-full-model',
+         'context_path': global_config.DATA_DIR
+         + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
+         'context_identifier': 'workload'
+        },
+        {'name': 'egreedy', 'epsilon':0.1}
+    ]
+
+    _write_config_for_params(0, 220, 30, 5, True, 'top', policies, 'cb_baseline')
+    _write_config_for_params(0, 220, 30, 5, False, 'top', policies, 'cb_baseline')    
+        
+    
+def _generate_experiment_configs():
+    """Generates the yaml files that contain the configs of the experiments."""
+    print('Generate experiment configs')
+    _generate_mpts()
+    _generate_egreedy()
 
 
 def _write_config_for_params(
@@ -297,8 +313,8 @@ def _write_config_for_params(
         wsi: int,
         ws: int,
         s: bool,
-        rk: str, policies:
-        dict,
+        rk: str,
+        policies: dict,
         name: str
 ):
     name = "%s_%s_L_%d_wsi_%d_ws_%d" % (

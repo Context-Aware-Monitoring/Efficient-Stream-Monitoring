@@ -156,8 +156,8 @@ class Experiment:
             return GraphArmKnowledge(self._reward_df.columns.values, **_get_dict_of_policy_params_(config['graph_knowledge']))
         elif name == 'random':
             return RandomGraphKnowledge(self._K, **_get_dict_of_policy_params_(config['graph_knowledge']))
-        elif name == 'wrong':
-            return WrongGraphArmknowledge(self._reward_df.columns.values, **_get_dict_of_policy_params_(config['graph_knowledge']))
+        elif name in ['flip', 'remove', 'add', 'unify']:
+            return WrongGraphArmknowledge(self._reward_df.columns.values, name, **_get_dict_of_policy_params_(config['graph_knowledge']))
 
         return None
 

@@ -101,30 +101,29 @@ class AbstractBandit(ABC):
         """Picks each iteration L of K arms. Receives the reward for the picked
         arms. Adjusts the picking strategy.
         """
-        if self._sliding_window_size is not None:
-            self._init_sliding_window()
-
         for _ in range(0, self._T):
-            self._pick_arms()
+            self.perform_iteration()
 
-            self._learn()
+    def perform_iteration(self):
+        self._picked_arms_indicies = self._pick_arms()
+        self._learn()
 
-            if self._graph_knowledge is not None:
-                self._dynamically_update_neighborhood()
-                self._propagate_reward_to_neighborhood()
+        if self._graph_knowledge is not None:
+            self._dynamically_update_neighborhood()
+            self._propagate_reward_to_neighborhood()
 
-            if self._sliding_window_size is not None:
-                self._update_sliding_window()
-                self._sliding_window_index += 1
-                self._sliding_window_index %= self._sliding_window_size
+        if self._sliding_window_size is not None:
+            self._update_sliding_window()
+            self._sliding_window_index += 1
+            self._sliding_window_index %= self._sliding_window_size
 
-            max_reward_this_round = np.sort(
-                self._reward_df.values[self._iteration, :])[-self._L:].sum()
-            received_reward_this_round = (
-                self._reward_df.values[self._iteration, self._picked_arms_indicies]).sum()
-            self._regret[self._iteration] = max_reward_this_round - \
-                received_reward_this_round
-            self._iteration += 1
+        max_reward_this_round = np.sort(
+            self._reward_df.values[self._iteration, :])[-self._L:].sum()
+        received_reward_this_round = (
+            self._reward_df.values[self._iteration, self._picked_arms_indicies]).sum()
+        self._regret[self._iteration] = max_reward_this_round - \
+            received_reward_this_round
+        self._iteration += 1
 
     def _init_sliding_window(self):
         """Initializes the required data structures if a sliding window is
@@ -137,8 +136,10 @@ class AbstractBandit(ABC):
     def _propagate_reward_to_neighborhood(self):
         neighbors_played_arms = self._graph_knowledge.edges[self._picked_arms_indicies]
         arm_number_of_updates = neighbors_played_arms.sum(
-            axis=0) / self._graph_knowledge.weight
+            axis=0)
         arm_gets_update = arm_number_of_updates > 0
+
+        arm_gets_update[self._picked_arms_indicies] = False
 
         reshaped_rewards = np.repeat(
             self._reward_df.values[self._iteration, self._picked_arms_indicies], self._K).reshape(-1, self._K)
@@ -198,8 +199,7 @@ class RandomPolicy(AbstractBandit):
         return 'random'
 
     def _pick_arms(self):
-        self._picked_arms_indicies = self._rnd.choice(
-            self._K, self._L, replace=False)
+        return self._rnd.choice(self._K, self._L, replace=False)
 
 
 class EGreedy(AbstractBandit):
@@ -226,14 +226,18 @@ class EGreedy(AbstractBandit):
             graph_knowledge=graph_knowledge,
             identifier=identifier
         )
+        assert epsilon >= 0.0
 
         self._epsilon = epsilon
         self._init_expected_values = np.repeat(1.0, self._K)
-        self._expected_values = self._init_expected_values
+        self._expected_values = np.copy(self._init_expected_values)
         self._sum_reward = np.zeros(self._K)
         self._num_plays = np.zeros(self._K)
+        self._arm_last_explored = np.repeat(-1, self._K)
 
         self._rnd = np.random.RandomState(random_seed)
+
+        EGreedy._init_sliding_window(self)
 
         if self._graph_knowledge is not None:
             self._sum_pushes_by_neighbours = np.zeros(self._K)
@@ -256,6 +260,9 @@ class EGreedy(AbstractBandit):
         )
 
     def _init_sliding_window(self):
+        if self._sliding_window_size is None:
+            return
+
         self._sliding_played_arms = np.zeros(
             (self._sliding_window_size, self._K), dtype=bool)
         self._sliding_reward = np.zeros((self._sliding_window_size, self._K))
@@ -264,9 +271,12 @@ class EGreedy(AbstractBandit):
             self._sliding_push = np.zeros((self._sliding_window_size, self._K))
             self._sliding_num_pushes = np.zeros(
                 (self._sliding_window_size, self._K))
+            self._push_received_this_iteration = np.zeros(self._K)
+            self._num_push_received_this_iteration = np.zeros(self._K)
 
     def _update_sliding_window(self):
-        arm_played_window_size_iterations_ago = self._played_arms[self._sliding_window_index, :]
+        arm_played_window_size_iterations_ago = self._sliding_played_arms[
+            self._sliding_window_index, :]
         self._num_plays -= arm_played_window_size_iterations_ago
         self._sum_reward[arm_played_window_size_iterations_ago] -= self._sliding_reward[self._sliding_window_index,
                                                                                         arm_played_window_size_iterations_ago]
@@ -275,17 +285,19 @@ class EGreedy(AbstractBandit):
             self._num_pushes_by_neighbours -= self._sliding_num_pushes[self._sliding_window_index, :]
             self._sum_pushes_by_neighbours -= self._sliding_push[self._sliding_window_index, :]
 
-        self._num_plays[self._sliding_window_index,
-                        arm_played_window_size_iterations_ago] = 0.0
+        self._sliding_played_arms[self._sliding_window_index,
+                                  arm_played_window_size_iterations_ago] = False
         self._sliding_reward[self._sliding_window_index,
                              arm_played_window_size_iterations_ago] = 0.0
-        self._num_pushes_by_neighbours[self._sliding_window_index] = 0.0
-        self._sum_pushes_by_neighbours[self._sliding_window_index] = 0.0
 
-        self._num_pushes_by_neighbours = self._num_pushes_by_neighbours - \
-            self._sliding_num_pushes[self._sliding_window_index - 1]
-        self._sum_pushes_by_neighbours = self._sum_pushes_by_neighbours - \
-            self._sliding_push[self._sliding_window_index - 1]
+        self._sliding_played_arms[self._sliding_window_index,
+                                  self._picked_arms_indicies] = True
+        self._sliding_reward[self._sliding_window_index,
+                             self._picked_arms_indicies] = self._reward_df.values[self._iteration, self._picked_arms_indicies]
+
+        if self._graph_knowledge is not None:
+            self._sliding_num_pushes[self._sliding_window_index] = self._num_push_received_this_iteration
+            self._sliding_push[self._sliding_window_index] = self._push_received_this_iteration
 
         self._recompute_expected_values()
 
@@ -294,14 +306,12 @@ class EGreedy(AbstractBandit):
         and an exploitation step with probability 1-epsilon.
         """
         if self._epsilon > self._rnd.rand():
-            self.explore_arms()
+            return self.explore_arms()
         else:
-            self._picked_arms_indicies = np.argsort(
-                self._expected_values)[-self._L:]
+            return np.argsort(self._expected_values)[-self._L:]
 
     def explore_arms(self):
-        self._picked_arms_indicies = self._rnd.choice(
-            self._K, self._L, replace=False)
+        return self._rnd.choice(self._K, self._L, replace=False)
 
     def _learn(self):
         """Learns from the reward for the picked arms. Updates the empirical
@@ -310,21 +320,34 @@ class EGreedy(AbstractBandit):
         self._num_plays[self._picked_arms_indicies] += 1
         self._sum_reward[self._picked_arms_indicies] += self._reward_df.values[self._iteration,
                                                                                self._picked_arms_indicies]
+        self._arm_last_explored[self._picked_arms_indicies] = self._iteration
+
         if self._graph_knowledge is None:  # otherwise we will recompute it later anyway
             self._recompute_expected_values()
 
     def _recompute_expected_values(self):
+        not_yet_explored = self._arm_last_explored == -1
+
+        if self._sliding_window_size is not None:
+            not_yet_explored = np.logical_or(
+                not_yet_explored, self._arm_last_explored <= self._iteration - self._sliding_window_size)
+
         if self._graph_knowledge is None:
-            self._expected_values = np.where(
-                self._num_plays > 0, self._sum_reward / self._num_plays, self._init_expected_values)
+            self._expected_values = self._sum_reward / self._num_plays
+            self._expected_values[not_yet_explored] = self._init_expected_values[not_yet_explored]
         else:
-            self._expected_values = (
-                np.where(self._num_plays > 0, self._sum_reward, self._init_expected_values) + self._sum_pushes_by_neighbours)\
-                / (np.where(self._num_plays > 0, self._num_plays, 1) + self._num_pushes_by_neighbours)
+            self._expected_values = (np.where(not_yet_explored, self._init_expected_values, self._sum_reward) + self._sum_pushes_by_neighbours)\
+                / (np.where(not_yet_explored, 1, self._num_plays) + self._num_pushes_by_neighbours)
 
     def _update_parameters_for_neighbored_arms(self, update, arm_gets_update, number_updates):
         self._sum_pushes_by_neighbours[arm_gets_update] += update
         self._num_pushes_by_neighbours[arm_gets_update] += number_updates
+
+        if self._sliding_window_size is not None:
+            self._push_received_this_iteration = np.zeros(self._K)
+            self._num_push_received_this_iteration = np.zeros(self._K)
+            self._push_received_this_iteration[arm_gets_update] = update
+            self._num_push_received_this_iteration[arm_gets_update] = number_updates
 
         self._recompute_expected_values()
 
@@ -375,7 +398,7 @@ class DKEGreedy(EGreedy):
         self._init_ev_likely_arms = init_ev_likely_arms
         self._init_ev_unlikely_arms = init_ev_unlikely_arms
         self._init_expected_values = self._get_init_ev()
-        self._expected_values = self._init_expected_values
+        self._expected_values = np.copy(self._init_expected_values)
 
     def _get_init_ev(self):
         """Intializes the expected value for the arms. An arm is a pair of
@@ -407,7 +430,7 @@ class DKEGreedy(EGreedy):
             self._L,
             replace=False
         )
-        self._picked_arms_indicies = explore_arm_indicies
+        return explore_arm_indicies
 
     @property
     def name(self) -> str:
@@ -483,9 +506,9 @@ class CDKEGreedy(DKEGreedy):
         algorithm to pick the arms.
         """
         if self._epsilon > self._rnd.rand():
-            self.explore_arms()
+            return self.explore_arms()
         else:
-            self._push_and_pick_arms()
+            return self._push_and_pick_arms()
 
     def _push_and_pick_arms(self):
         current_context = self._context_df.values[self._iteration, :]
@@ -505,10 +528,11 @@ class CDKEGreedy(DKEGreedy):
             factors = np.where(arm_gets_pushed, self._push, 1.0)
             pushed_expected_values *= factors
 
-        self._picked_arms_indicies = np.argsort(
-            pushed_expected_values)[-self._L:]
+        picked_arms_indicies = np.argsort(pushed_expected_values)[-self._L:]
 
-        self._no_pushed[self._picked_arms_indicies] += self._arm_knowledge.arms_eligible_for_push[self._picked_arms_indicies]
+        self._no_pushed[picked_arms_indicies] += self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
+
+        return picked_arm_indicies
 
     def _dynamically_update_neighborhood(self):
         current_context = self._context_df.values[self._iteration, :]
@@ -557,6 +581,8 @@ class MPTS(AbstractBandit):
         self._alpha = np.zeros(self._K)
         self._beta = np.zeros(self._K)
 
+        MPTS._init_sliding_window(self)
+
     @property
     def name(self):
         if self._identifier is not None:
@@ -568,11 +594,14 @@ class MPTS(AbstractBandit):
         )
 
     def _init_sliding_window(self):
+        if self._sliding_window_size is None:
+            return
+
         self._sliding_alpha = np.zeros((self._sliding_window_size, self._K))
         self._sliding_beta = np.zeros((self._sliding_window_size, self._K))
 
     def _update_parameters_for_neighbored_arms(self, update, arm_gets_update, number_updates):
-        beta_update = number_updates * self._graph_knowledge.weight - update
+        beta_update = number_updates - update
         self._alpha[arm_gets_update] += update
         self._beta[arm_gets_update] += beta_update
 
@@ -588,7 +617,8 @@ class MPTS(AbstractBandit):
         picked. Some arms never get explored.
         """
         theta = self._rnd.beta(self._alpha + 1, self._beta + 1)
-        self._picked_arms_indicies = np.argsort(theta)[-self._L:]
+
+        return np.argsort(theta)[-self._L:]
 
     def _learn(self):
         """Beta distribution gets updated based on the reward. If reward is
@@ -602,6 +632,7 @@ class MPTS(AbstractBandit):
     def _update_sliding_window(self):
         reward_this_round = self._reward_df.values[self._iteration,
                                                    self._picked_arms_indicies]
+
         self._alpha -= self._sliding_alpha[self._sliding_window_index, :]
         self._beta -= self._sliding_beta[self._sliding_window_index, :]
 
@@ -704,7 +735,8 @@ class PushMPTS(MPTS):
         """
         theta = self._rnd.beta(self._alpha + 1, self._beta + 1)
         theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
-        self._picked_arms_indicies = np.argsort(theta)[-self._L:]
+
+        return np.argsort(theta)[-self._L:]
 
 
 class CPushMpts(PushMPTS):
@@ -763,9 +795,11 @@ class CPushMpts(PushMPTS):
         theta = self._rnd.beta(alpha_pushed + 1, self._beta + 1)
         theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
 
-        self._picked_arms_indicies = np.argsort(theta)[-self._L:]
+        picked_arms_indicies = np.argsort(theta)[-self._L:]
 
-        self._no_pushed[self._picked_arms_indicies] += self._arm_knowledge.arms_eligible_for_push[self._picked_arms_indicies]
+        self._no_pushed[picked_arms_indicies] += self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
+
+        return picked_arms_indicies
 
     def _dynamically_update_neighborhood(self):
         current_context = self._context_df.values[self._iteration, :]
@@ -893,14 +927,16 @@ class CBFullModel(CBAbstractBandit):
         if self._iteration <= self._batch_size:  # model not fitted yet, pick random arms
             random_arm_indicies = self._rnd.choice(
                 self._K, size=self._L, replace=False)
-            self._picked_arms_indicies = random_arm_indicies
+            picked_arms_indicies = random_arm_indicies
         else:
-            self._picked_arms_indicies = (self._algorithm.topN(
+            picked_arms_indicies = (self._algorithm.topN(
                 self._context_df.values[self._iteration, :], self._L)[0])
 
-        self._picked_arms[self._iteration] = self._picked_arms_indicies
+        self._picked_arms[self._iteration] = picked_arms_indicies
         self._received_rewards[self._iteration,
-                               :] = self._reward_df.values[self._iteration, self._picked_arms_indicies]
+                               :] = self._reward_df.values[self._iteration, picked_arms_indicies]
+
+        return picked_arms_indicies
 
     def _learn(self):
         # (re)fit model
@@ -981,17 +1017,19 @@ class CBStreamingModel(CBAbstractBandit):
         if self._iteration <= self._batch_size:  # model not fitted yet, pick random arms
             random_arm_indicies = self._rnd.choice(
                 self._K, size=self._L, replace=False)
-            self._picked_arms_indicies = random_arm_indicies
+            picked_arms_indicies = random_arm_indicies
         else:
-            self._picked_arms_indicies = (
+            picked_arms_indicies = (
                 self._algorithm.topN(
                     self._context_df.values[self._iteration, :],
                     self._L)[0])
 
         self._picked_arms[self._iteration %
-                          self._batch_size, :] = self._picked_arms_indicies
+                          self._batch_size, :] = picked_arms_indicies
         self._received_rewards[self._iteration % self._batch_size,
-                               :] = self._reward_df.values[self._iteration, self._picked_arms_indicies]
+                               :] = self._reward_df.values[self._iteration, picked_arms_indicies]
+
+        return picked_arms_indicies
 
     def _learn(self):
         # (re)fit model

@@ -303,11 +303,51 @@ class GraphArmKnowledge(DynamicArmKnowledge):
     def recompute_properties(self):
         self._edges = self._compute_edges()
 
+    def get_group_of_arms(self):
+        assert (self._edges == self._edges.T).all()
+
+        clique_number = 1
+
+        group_of_arms = np.zeros(self._K)
+        for row in range(self._K):
+            if group_of_arms[row] != 0:
+                continue
+
+            if self._edges[row, :].any():
+                group_of_arms[row] = clique_number
+                group_of_arms[self._edges[row, :] > 0] = clique_number
+                clique_number += 1
+
+        return group_of_arms
+
+    def get_adjacency_matrix_from_groups(self, groups):
+        indicies_of_cliques = list()
+        current_clique_number = None
+        for clique_number, idx in zip(sorted(groups), np.argsort(groups)):
+            if clique_number == 0:
+                continue
+            if current_clique_number is None or clique_number != current_clique_number:
+                current_clique_number = clique_number
+                indicies_of_cliques.append(list([idx]))
+            else:
+                indicies_of_cliques[-1].append(idx)
+
+        edges = np.zeros(shape=(len(groups), len(groups)))
+
+        for clique_idx in indicies_of_cliques:
+            adjacency = np.zeros(len(groups))
+            adjacency[clique_idx] = self._weight
+            edges[clique_idx, :] = adjacency
+
+        np.fill_diagonal(edges, 0.0)
+        assert (edges == edges.T).all()
+
+        return edges
 
     @property
     def weight(self) -> float:
         return self._weight
-    
+
     @property
     def edges(self) -> np.ndarray:
         """Returns an adjaceny matrix of size self._K * self._K. Arms i and j
@@ -319,53 +359,80 @@ class GraphArmKnowledge(DynamicArmKnowledge):
     def name(self):
         return '%.1f-correct-gk' % self._weight
 
+
 class WrongGraphArmknowledge(GraphArmKnowledge):
 
-    def __init__(self, arms: np.ndarray, weight: float = 0.5, control_host: str = 'wally113', percentage_right_edge_removal=0.5,percentage_wrong_edge_insertion=0.5):
-        self._percentage_right_edge_removal = percentage_right_edge_removal
-        self._percentage_wrong_edge_insertion = percentage_wrong_edge_insertion
+    def __init__(self, arms: np.ndarray, kind: str, n_affected: int, weight: float = 1.0, control_host: str = 'wally113', random_seed=0):
+        self._rnd = np.random.RandomState(random_seed)
         super().__init__(arms, weight, control_host)
 
+        self._kind = kind
+        self._n_affected = n_affected
+        if kind == 'remove':
+            self._remove_edges(n_affected)
+        elif kind == 'add':
+            self._add_edges(n_affected)
+        elif kind == 'unify':
+            self._unify_cliques(n_affected)
+        elif kind == 'flip':
+            self._flip_edges(n_affected)
 
-    def _compute_edges(self):
-        original_edges = super()._compute_edges()
-        edges = original_edges
-        
-        nodes_has_neighbors = (edges != 0.0).any(axis=1)
-        canidates_indicies_for_edge_removal = np.arange(self._K)[nodes_has_neighbors]
-        indicies_right_edge_removal = np.random.choice(canidates_indicies_for_edge_removal, int(len(canidates_indicies_for_edge_removal) * self._percentage_right_edge_removal), replace=False)
+    def _remove_edges(self, n_affected_arms):
+        groups = self.get_group_of_arms()
 
-        edges[indicies_right_edge_removal] = 0.0
-        edges[:, indicies_right_edge_removal] = 0.0
-        
+        candidates = np.arange(len(groups))[groups > 0]
+        remove_group_indicies = self._rnd.choice(
+            candidates, n_affected_arms, replace=False)
 
-        node_ids_for_wrong_edge_insertion = np.random.choice(self._K, int(self._K * self._percentage_wrong_edge_insertion))
-        indicies_wrong_edge_insertion, count_of_edges = np.unique(node_ids_for_wrong_edge_insertion, return_counts=True)
+        groups[remove_group_indicies] = 0.0
 
-        for cid,cc in zip(indicies_wrong_edge_insertion,count_of_edges):
-            possible_indicies = np.arange(self._K)[np.logical_and(original_edges[cid, :] == False, edges[cid, :] == False)]
-            new_neighbors_indicies = np.random.choice(possible_indicies, cc, replace=True)
-            
-            is_neighbor = (original_edges[new_neighbors_indicies,:].sum(axis=0) > 0)
-            is_neighbor[new_neighbors_indicies] = True
-            edges[cid, :] = is_neighbor * self._weight
-            edges[:, cid] = is_neighbor * self._weight
-        
+        self._edges = self.get_adjacency_matrix_from_groups(groups)
 
-        assert (edges == edges.T).all()
+    def _add_edges(self, n_affected_arms):
+        groups = self.get_group_of_arms()
 
-        return edges
+        candidates = np.arange(len(groups))[groups == 0]
+        add_group_indicies = self._rnd.choice(
+            candidates, n_affected_arms, replace=False)
+
+        groups[add_group_indicies] = self._rnd.choice(
+            np.arange(groups.max()) + 1, n_affected_arms)
+
+        self._edges = self.get_adjacency_matrix_from_groups(groups)
+
+    def _unify_cliques(self, n_affected_cliques):
+        group = self.get_group_of_arms()
+
+        unique_groups = np.delete(np.unique(group), 0)
+
+        unified_groups = self._rnd.choice(
+            unique_groups, 2 * n_affected_cliques, replace=False).reshape(-1, 2)
+
+        for ug in unified_groups:
+            min_clique_number = ug.min()
+            group[(group == ug[0]) | (group == ug[1])] = min_clique_number
+
+        self._edges = self.get_adjacency_matrix_from_groups(group)
+
+    def _flip_edges(self, n_affected):
+        self._edges = self._edges.flatten()
+
+        ind = self._rnd.choice(
+            np.arange(self._edges.shape[0]), n_affected, replace=False)
+
+        self._edges[ind] = np.logical_not(self._edges[ind])
+        self._edges = self._edges.reshape(self._K, self._K)
 
     @property
     def name(self):
-        return '%.1f/%.1f-%.1f-wrong-gk' % (self._percentage_right_edge_removal, self._percentage_wrong_edge_insertion, self._weight)
+        return '%.1f-wrong-gk-%s-%d' % (self._weight, self._kind, self._affected)
 
-        
+
 class RandomGraphKnowledge(Knowledge):
 
     edges: np.ndarray
 
-    def __init__(self, K: int, weight: float=0.5, probability_neighbors: List[float]=[0.4, 0.15, 0.15, 0.15, 0.15], seed: int=0):
+    def __init__(self, K: int, weight: float = 0.5, probability_neighbors: List[float] = [0.4, 0.15, 0.15, 0.15, 0.15], seed: int = 0):
         self._K = K
         self._weight = weight
         self._probability_neighbors = probability_neighbors
