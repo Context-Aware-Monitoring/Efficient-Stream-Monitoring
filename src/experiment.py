@@ -124,20 +124,8 @@ class Experiment:
         self._K = len(self._reward_df.columns)
         self._T = len(self._reward_df.index)
 
-        if config.get('kind') is not None and config['kind'] == 'top':
-            self._reward_df.loc[:] = self._reward_df.values >= np.sort(
-                self._reward_df.values, axis=1)[:, -self._L].reshape(-1, 1)
-        elif config.get('kind') is not None and config['kind'] == 'threshold':
-            self._reward_df.loc[:] = self._reward_df.values >= config['threshold']
+        self._seed = config.get('seed', 0)
 
-        self._policies = [[] for _ in range(runs)]
-
-        self._seed = config.get('seed')
-        if self._seed is not None:
-            seed(self._seed)
-
-        self._number_policies = len(config['policies'])
-        self._create_policies(config)
         self._config = config
 
         self._average_regret = {}
@@ -154,60 +142,62 @@ class Experiment:
 
         if name == 'correct':
             return GraphArmKnowledge(self._reward_df.columns.values, **_get_dict_of_policy_params_(config['graph_knowledge']))
-        elif name == 'random':
-            return RandomGraphKnowledge(self._K, **_get_dict_of_policy_params_(config['graph_knowledge']))
+        # elif name == 'random':
+        #     return RandomGraphKnowledge(self._K, **_get_dict_of_policy_params_(config['graph_knowledge']))
         elif name in ['flip', 'remove', 'add', 'unify']:
+            config['graph_knowledge']['random_seed'] = self._seed
+            self._seed += 1
             return WrongGraphArmknowledge(self._reward_df.columns.values, name, **_get_dict_of_policy_params_(config['graph_knowledge']))
 
         return None
 
-    def _create_policies(self, config):
-        """Creates the policies based on the configuration and adds them to
-        _policies.
+    def _create_policy(self, config_for_policy):
+        """Creates the policy based on the configuration and returns it.
+        If the configuration is not valid returns None.
 
         Args:
           config (string): Path to a yaml config file
         """
-        for config_for_policy in config['policies']:
-            name = config_for_policy['name']
-            context = _read_context_from_config(config_for_policy)
-            graph_knowledge = self._read_graph_knowledge_from_config(
-                config_for_policy)
-            config_for_policy = _get_dict_of_policy_params_(
-                config_for_policy) | {'graph_knowledge': graph_knowledge}
-            for current_run in range(self._number_of_runs):
-                if name == 'random':
-                    self._policies[current_run].append(RandomPolicy(
-                        self._L, self._reward_df, self._seed, **config_for_policy))
-                elif name == 'mpts':
-                    self._policies[current_run].append(
-                        MPTS(self._L, self._reward_df, self._seed, **config_for_policy))
-                elif name in ('egreedy', 'greedy'):
-                    self._policies[current_run].append(
-                        EGreedy(self._L, self._reward_df, self._seed, **config_for_policy))
-                elif name == 'push-mpts':
-                    self._policies[current_run].append(
-                        PushMPTS(self._L, self._reward_df, self._seed, **config_for_policy))
-                elif name == 'random-network-mpts':
-                    self._policies[current_run].append(RandomNetworkMPTS(
-                        self._L, self._reward_df, self._seed, **config_for_policy))
-                elif name == 'dkegreedy':
-                    self._policies[current_run].append(
-                        DKEGreedy(self._L, self._reward_df, self._seed, **config_for_policy))
-                elif name == 'cdkegreedy':
-                    self._policies[current_run].append(CDKEGreedy(
-                        self._L, self._reward_df, self._seed, context, **config_for_policy))
-                elif name == 'cpush-mpts':
-                    self._policies[current_run].append(
-                        CPushMpts(self._L, self._reward_df, self._seed, context, **config_for_policy))
-                elif name == 'cb-full-model':
-                    self._policies[current_run].append(
-                        CBFullModel(self._L, self._reward_df, self._seed, context, **config_for_policy))
-                elif name == 'cb-streaming-model':
-                    self._policies[current_run].append(
-                        CBStreamingModel(self._L, self._reward_df, self._seed, context, **config_for_policy))
+        name = config_for_policy['name']
+        context = _read_context_from_config(config_for_policy)
+        graph_knowledge = self._read_graph_knowledge_from_config(
+            config_for_policy)
+        config_for_policy = _get_dict_of_policy_params_(
+            config_for_policy) | {'graph_knowledge': graph_knowledge}
 
-                self._seed += 1
+        pol = None
+
+        if name == 'random':
+            pol = RandomPolicy(self._L, self._reward_df,
+                               self._seed, **config_for_policy)
+        elif name == 'mpts':
+            pol = MPTS(self._L, self._reward_df,
+                       self._seed, **config_for_policy)
+        elif name in ('egreedy', 'greedy'):
+            pol = EGreedy(self._L, self._reward_df,
+                          self._seed, **config_for_policy)
+        elif name == 'push-mpts':
+            pol = PushMPTS(self._L, self._reward_df,
+                           self._seed, **config_for_policy)
+        elif name == 'dkegreedy':
+            pol = DKEGreedy(self._L, self._reward_df,
+                            self._seed, **config_for_policy)
+        elif name == 'cdkegreedy':
+            pol = CDKEGreedy(self._L, self._reward_df,
+                             self._seed, context, **config_for_policy)
+        elif name == 'cpush-mpts':
+            pol = CPushMpts(self._L, self._reward_df,
+                            self._seed, context, **config_for_policy)
+        elif name == 'cb-full-model':
+            pol = CBFullModel(self._L, self._reward_df,
+                              self._seed, context, **config_for_policy)
+        elif name == 'cb-streaming-model':
+            pol = CBStreamingModel(
+                self._L, self._reward_df, self._seed, context, **config_for_policy)
+
+        self._seed += 1
+
+        return pol
 
     def serialize_results(self):
         """Write the results of the experiment into the config and stores the
@@ -249,35 +239,35 @@ class Experiment:
             yaml.dump(self._config, outfile, default_flow_style=False)
 
     def run(self):
-        """Performs the experiment. In each of T iterations the policies pick
-        L arms and afterwards receive the reward for their choices and the
-        maximaliy obtainable reward.
+        """Performs the experiment. Creates each policy and runs it 
+        number_of_runs times. The policy picks L arms in each of the T
+        iterations. Afterwards serializes the results.
         """
         if self._experiment_name is not None:
             logging.info(
                 '%s: Started experiment %s on pid %d' %
                 (_get_now_as_string(), self._experiment_name, os.getpid()))
-        for current_run in range(self._number_of_runs):
-            for i, pol in enumerate(self._policies[current_run]):
+
+        for pol_config in self._config['policies']:
+            regret_each_run = np.zeros(shape=(self._T, self._number_of_runs))
+            cum_regret_each_run = np.zeros(
+                shape=(self._T, self._number_of_runs))
+
+            name = None
+            for current_run in range(self._number_of_runs):
+                pol = self._create_policy(pol_config)
+
+                if pol is None:
+                    break
+
+                name = pol.name
                 pol.run()
+                regret_each_run[:, current_run] = pol.regret
+                cum_regret_each_run[:, current_run] = pol.cum_regret
+                del pol
 
-        for i, pol in enumerate(self._policies[0]):
-            total_regret = pol.regret
-            total_cum_regret = pol.cum_regret
-
-            if self._number_of_runs >= 2:
-                for j in range(self._number_of_runs-1):
-                    total_regret = [
-                        x + y for x,
-                        y in zip(
-                            total_regret, self._policies[j + 1][i].regret)]
-                    total_cum_regret = [
-                        x+y for x, y in zip(total_cum_regret, self._policies[j+1][i].cum_regret)]
-
-            self._average_regret[pol.name] = [
-                x / self._number_of_runs for x in total_regret]
-            self._average_cum_regret[pol.name] = [
-                x / self._number_of_runs for x in total_cum_regret]
+            self._average_regret[name] = regret_each_run.mean(axis=1)
+            self._average_cum_regret[name] = cum_regret_each_run.mean(axis=1)
 
         ordered_policies = sorted(
             self._average_cum_regret.keys(),
