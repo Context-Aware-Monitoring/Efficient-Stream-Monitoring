@@ -616,7 +616,7 @@ class MPTS(AbstractBandit):
         distribution. The arms that have the highest L random values get
         picked. Some arms never get explored.
         """
-        theta = self._rnd.beta(np.minumum(1.0, self._alpha + 1), np.maximum(1.0,self._beta + 1))
+        theta = self._rnd.beta(np.maximum(1.0, self._alpha + 1), np.maximum(1.0,self._beta + 1))
 
         return np.argsort(theta)[-self._L:]
 
