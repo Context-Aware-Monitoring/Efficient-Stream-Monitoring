@@ -15,6 +15,8 @@ import typing
 from typing import List, Tuple
 from .domain_knowledge import ArmKnowledge, PushArmKnowledge, GraphArmKnowledge, RandomGraphKnowledge, Knowledge
 
+np.seterr(invalid='ignore')
+np.seterr(divide='ignore')
 
 def repeat_entry_L_times(X: np.ndarray, L: int) -> np.ndarray:
     return np.tile(X, L).reshape(-1, X.shape[1])
