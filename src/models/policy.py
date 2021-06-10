@@ -616,7 +616,7 @@ class MPTS(AbstractBandit):
         distribution. The arms that have the highest L random values get
         picked. Some arms never get explored.
         """
-        theta = self._rnd.beta(self._alpha + 1, self._beta + 1)
+        theta = self._rnd.beta(self._alpha + 1, np.minimum(1.0,self._beta + 1))
 
         return np.argsort(theta)[-self._L:]
 
@@ -733,7 +733,7 @@ class PushMPTS(MPTS):
         distribution. The arms that have the highest L random values get
         picked.
         """
-        theta = self._rnd.beta(self._alpha + 1, self._beta + 1)
+        theta = self._rnd.beta(self._alpha + 1, np.minimum(1.0,self._beta + 1))
         theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
 
         return np.argsort(theta)[-self._L:]
@@ -792,7 +792,7 @@ class CPushMpts(PushMPTS):
 
         alpha_pushed = self._alpha + self._arm_knowledge.arms_eligible_for_push * self._cpush
 
-        theta = self._rnd.beta(alpha_pushed + 1, self._beta + 1)
+        theta = self._rnd.beta(alpha_pushed + 1, np.minimum(1.0,self._beta + 1))
         theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
 
         picked_arms_indicies = np.argsort(theta)[-self._L:]

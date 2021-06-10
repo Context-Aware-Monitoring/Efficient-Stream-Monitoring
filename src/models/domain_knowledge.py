@@ -425,7 +425,7 @@ class WrongGraphArmknowledge(GraphArmKnowledge):
 
     @property
     def name(self):
-        return '%.1f-wrong-gk-%s-%d' % (self._weight, self._kind, self._affected)
+        return '%.1f-wrong-gk-%s-%d' % (self._weight, self._kind, self._n_affected)
 
 
 class RandomGraphKnowledge(Knowledge):
