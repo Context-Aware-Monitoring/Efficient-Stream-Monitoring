@@ -214,18 +214,18 @@ class Experiment:
             yaml_file = '%sexperiment%s_config.yml' % (
                 SERIALIZATION_DIR, experiment_id)
 
-        cum_regret_csv_file = '%scum_regret_experiment_%s.csv' % (
-            SERIALIZATION_DIR,
-            experiment_id)
-        average_regret_csv_file = '%saverage_regret_experiment_%s.csv' % (
-            SERIALIZATION_DIR,
-            experiment_id)
+        # cum_regret_csv_file = '%scum_regret_experiment_%s.csv' % (
+        #     SERIALIZATION_DIR,
+        #     experiment_id)
+        # average_regret_csv_file = '%saverage_regret_experiment_%s.csv' % (
+        #     SERIALIZATION_DIR,
+        #     experiment_id)
 
-        cum_regret_df = pd.DataFrame(data=self._average_cum_regret)
-        average_regret_df = pd.DataFrame(data=self._average_regret)
+        # cum_regret_df = pd.DataFrame(data=self._average_cum_regret)
+        # average_regret_df = pd.DataFrame(data=self._average_regret)
 
-        cum_regret_df.to_csv(cum_regret_csv_file)
-        average_regret_df.to_csv(average_regret_csv_file)
+        # cum_regret_df.to_csv(cum_regret_csv_file)
+        # average_regret_df.to_csv(average_regret_csv_file)
         with open(yaml_file, 'w') as outfile:
             self._config |= {
                 'results':
@@ -234,8 +234,9 @@ class Experiment:
                         average_cum_regret_for_policy[-1]))
                     for policy_name, average_cum_regret_for_policy in self._average_cum_regret.items()
                 },
-                'cum_regret_csv_file': cum_regret_csv_file,
-                'average_regret_csv_file': average_regret_csv_file}
+                # 'cum_regret_csv_file': cum_regret_csv_file,
+                # 'average_regret_csv_file': average_regret_csv_file
+            }
             yaml.dump(self._config, outfile, default_flow_style=False)
 
     def run(self):
