@@ -868,7 +868,7 @@ class CBAbstractBandit(AbstractBandit):
                 explore_prob=kwargs.get('epsilon', 0.1),
                 batch_train=batch_train
             )
-        elif self._algorithm == 'bootstrapped_ucb':
+        elif self._algorithm_name == 'bootstrapped_ucb':
             self._algorithm = BootstrappedUCB(
                 base_algorithm,
                 nchoices=self._K,
