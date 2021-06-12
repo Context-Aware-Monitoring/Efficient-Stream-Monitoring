@@ -868,7 +868,7 @@ class CBAbstractBandit(AbstractBandit):
                 explore_prob=kwargs.get('epsilon', 0.1),
                 batch_train=batch_train
             )
-        elif algorithm == 'bootstrapped_ucb':
+        elif self._algorithm == 'bootstrapped_ucb':
             self._algorithm = BootstrappedUCB(
                 base_algorithm,
                 nchoices=self._K,
@@ -971,7 +971,9 @@ class CBFullModel(CBAbstractBandit):
             return self._identifier
 
         name = 'cb-full-model-%s-%s-%s_b_%d' % (self._context_identifier,
-                                                self._base_algorithm_name, self._algorithm_name, self._batch_size,)
+                                                self._base_algorithm_name,
+                                                self._algorithm_name,
+                                                self._batch_size,)
 
         if self._algorithm_name == 'egreedy':
             name = '%s_e_%.2f' % (name, self._algorithm.explore_prob)
