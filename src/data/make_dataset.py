@@ -287,24 +287,24 @@ def _generate_egreedy():
     _write_configs_for_policies(policies, name='egreedy')    
 
 def _generate_cb():
-    policies = [
+    policies = []
+    policies.extend(
         {'name': 'cb-full-model',
          'context_path': global_config.DATA_DIR
          + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
          'context_identifier': 'workload'
         },
-        {'name': 'egreedy', 'epsilon':0.1}
-    ]
+        {'base_algorithm_name' : ['logistic_regression', 'ridge', 'ard_regression', 'lin_svc', 'ridge_classifier'], 'algorithm_name' : ['egreedy', 'bootstrapped_ucb']}
+    )
 
-    _write_config_for_params(0, 220, 30, 5, True, 'top', policies, 'cb_baseline')
-    _write_config_for_params(0, 220, 30, 5, False, 'top', policies, 'cb_baseline')    
-        
+    _write_configs_for_policies(policies, name='cb')
     
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
     _generate_mpts()
     _generate_egreedy()
+    _generate_cb()
 
 
 def _write_config_for_params(
