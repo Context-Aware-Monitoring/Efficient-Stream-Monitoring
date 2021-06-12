@@ -10,6 +10,7 @@ WINDOW_STEPS = [5, 10, 15]
 Ls = [1,5,10,20,50,100]
 THRESHOLDS = [0.6,0.7,0.8]
 REWARD_KINDS = ['continous', 'top', 'threshold']
+BINARY_REWARD_KINDS = ['top', 'threshold']
 SEQ = [True, False]
 
 DATA_DIR = '%s/data' % (dirname(dirname(abspath(__file__))))

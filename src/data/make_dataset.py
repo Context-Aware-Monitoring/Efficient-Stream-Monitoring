@@ -299,7 +299,7 @@ def _generate_cb():
         )
     )
 
-    _write_configs_for_policies(policies, name='cb')
+    _write_configs_for_policies(policies, name='cb', binary_rewards_only=True)
     
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
@@ -341,14 +341,15 @@ def _write_config_for_params(
                 'reward_path': reward_path}, '%s_r_threshold_%.1f' % (name, th))
 
 
-def _write_configs_for_policies(policies, name=''):
+def _write_configs_for_policies(policies, name='', binary_rewards_only=False):
+    rewards = global_config.BINARY_REWARD_KINDS if binary_rewards_only else global_config.REWARD_KINDS
     for seed, params in enumerate(
             itertools.product(
                 global_config.Ls,
                 global_config.WINDOW_SIZES,
                 global_config.WINDOW_STEPS,
                 global_config.SEQ,
-                global_config.REWARD_KINDS
+                rewards
             )
     ):
         _write_config_for_params(
