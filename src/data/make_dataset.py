@@ -289,12 +289,14 @@ def _generate_egreedy():
 def _generate_cb():
     policies = []
     policies.extend(
-        {'name': 'cb-full-model',
-         'context_path': global_config.DATA_DIR
-         + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
-         'context_identifier': 'workload'
-        },
-        {'base_algorithm_name' : ['logistic_regression', 'ridge', 'ard_regression', 'lin_svc', 'ridge_classifier'], 'algorithm_name' : ['egreedy', 'bootstrapped_ucb']}
+        get_cross_validated_policies(
+            {'name': 'cb-full-model',
+             'context_path': global_config.DATA_DIR
+             + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
+             'context_identifier': 'workload'
+            },
+            {'base_algorithm_name' : ['logistic_regression', 'ridge', 'ard_regression', 'lin_svc', 'ridge_classifier'], 'algorithm_name' : ['egreedy', 'bootstrapped_ucb']}
+        )
     )
 
     _write_configs_for_policies(policies, name='cb')
