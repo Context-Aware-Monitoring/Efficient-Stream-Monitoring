@@ -320,7 +320,7 @@ def _generate_cdkegreedy():
                 'epsilon': [0, 0.1],
                 'one_active_host_sufficient_for_push': [True, False],
                 'push': [1.0,1.2],
-                'sliding_window_sizes': global_config.SLIDING_WINDOW_SIZES,
+                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
                 'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
             }
         )
@@ -346,7 +346,7 @@ def _generate_cpush_mpts():
             {
                 'one_active_host_sufficient_for_push': [True, False],
                 'cpush': [0,1],
-                'sliding_window_sizes': global_config.SLIDING_WINDOW_SIZES,
+                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
                 'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
             }
         )
