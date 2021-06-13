@@ -497,6 +497,7 @@ class CDKEGreedy(DKEGreedy):
 
         self._arm_knowledge = PushArmKnowledge(
             self._arms, one_active_host_sufficient_for_push, control_host)
+        self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
         self._context_df = context_df
         self._no_pushed = np.zeros(self._K)
         self._push = push
@@ -565,8 +566,9 @@ class CDKEGreedy(DKEGreedy):
         if self._identifier is not None:
             return self._identifier
 
-        return '%s-c%.1f/%d_%s' % (
-            self._push_kind, self._push, self._max_number_pushes, super().name)
+        host_name = 'one_host' if self._one_active_host_sufficient_for_push else 'two_host'
+        return '%s_%s-c%.1f/%d_%s' % (
+            host_name, self._push_kind, self._push, self._max_number_pushes, super().name)
 
 
 class MPTS(AbstractBandit):
@@ -795,6 +797,7 @@ class CPushMpts(PushMPTS):
                          graph_knowledge=graph_knowledge, identifier=identifier)
         self._arm_knowledge = PushArmKnowledge(
             self._arms, one_active_host_sufficient_for_push, control_host)
+        self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
         self._context_df = context_df
         self._cpush = cpush
         self._max_number_pushes = q
@@ -853,7 +856,8 @@ class CPushMpts(PushMPTS):
         if self._identifier is not None:
             return self._identifier
 
-        return 'c%1.f/%d_%s' % (self._cpush, self._max_number_pushes,
+        host_name = 'one_host' if self._one_active_host_sufficient_for_push else 'two_host'
+        return '%s_c%1.f/%d_%s' % (host_name, self._cpush, self._max_number_pushes,
                                 super().name)
 
 

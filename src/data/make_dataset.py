@@ -319,12 +319,40 @@ def _generate_cdkegreedy():
             {
                 'epsilon': [0, 0.1],
                 'one_active_host_sufficient_for_push': [True, False],
-                'push': [1.0,1.2]
+                'push': [1.0,1.2],
+                'sliding_window_sizes': global_config.SLIDING_WINDOW_SIZES,
+                'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
             }
         )
     )
 
     _write_configs_for_policies(policies, name='cdkegreedy')
+
+def _generate_cpush_mpts():
+    policies = []
+
+    policies.extend(
+        get_cross_validated_policies(
+            {
+                'name': 'cpush-mpts',
+                'context_path':
+                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
+                'push_likely_arms' : 0,
+                'push_unlikely_arms' : 10,                
+                'push_temporal_correlated_arms': 1.0,
+                'q': 100,
+                'push_kind' : 'multiply'
+            },
+            {
+                'one_active_host_sufficient_for_push': [True, False],
+                'cpush': [0,1],
+                'sliding_window_sizes': global_config.SLIDING_WINDOW_SIZES,
+                'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
+            }
+        )
+    )
+
+    _write_configs_for_policies(policies, name='cpush_mpts')    
     
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
@@ -333,6 +361,7 @@ def _generate_experiment_configs():
     _generate_egreedy()
     _generate_cb()
     _generate_cdkegreedy()
+    _generate_cpush_mpts()
     
 
 def _write_config_for_params(
