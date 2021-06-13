@@ -340,8 +340,7 @@ def _generate_cpush_mpts():
                 'push_likely_arms' : 0,
                 'push_unlikely_arms' : 10,                
                 'push_temporal_correlated_arms': 1.0,
-                'q': 100,
-                'push_kind' : 'multiply'
+                'q': 100
             },
             {
                 'one_active_host_sufficient_for_push': [True, False],
