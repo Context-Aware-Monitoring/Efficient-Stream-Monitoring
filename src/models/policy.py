@@ -805,8 +805,9 @@ class CPushMpts(PushMPTS):
         CPushMpts._init_sliding_window(self)
 
     def _init_sliding_window(self):
-        self._sliding_push_received = np.zeros(shape=(self._sliding_window_size, self._K), dtype=bool)
-        self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
+        if self._sliding_window_size is not None:
+            self._sliding_push_received = np.zeros(shape=(self._sliding_window_size, self._K), dtype=bool)
+            self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
 
     def _update_sliding_window(self):
         super()._update_sliding_window()
