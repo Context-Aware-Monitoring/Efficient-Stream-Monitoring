@@ -502,7 +502,20 @@ class CDKEGreedy(DKEGreedy):
         self._push = push
         self._max_number_pushes = max_number_pushes
         self._push_kind = push_kind
+        CDKEGreedy._init_sliding_window(self)
 
+    def _init_sliding_window(self):
+        if self._sliding_window_size is not None:
+            self._sliding_push_received = np.zeros(shape=(self._sliding_window_size, self._K), dtype=bool)
+            self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
+
+    def _update_sliding_window(self):
+        super()._update_sliding_window()
+        self._no_pushed -= self._sliding_push_received[self._sliding_window_index, :]
+
+        self._sliding_push_received[self._sliding_window_index, :] = False
+        self._sliding_push_received[self._sliding_window_index] = self._push_received_this_iteration
+        
     def pick_arms(self):
         """Pushes the arms with the context. Uses the underlying DKEgreedy
         algorithm to pick the arms.
@@ -532,6 +545,10 @@ class CDKEGreedy(DKEGreedy):
 
         picked_arms_indicies = np.argsort(pushed_expected_values)[-self._L:]
 
+        if self._sliding_window_size is not None:
+            self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
+            self._push_received_this_iteration[picked_arms_indicies] = self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
+        
         self._no_pushed[picked_arms_indicies] += self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
 
         return picked_arm_indicies
@@ -782,7 +799,19 @@ class CPushMpts(PushMPTS):
         self._cpush = cpush
         self._max_number_pushes = q
         self._no_pushed = np.zeros(self._K)
+        CPushMpts._init_sliding_window(self)
 
+    def _init_sliding_window(self):
+        self._sliding_push_received = np.zeros(shape=(self._sliding_window_size, self._K), dtype=bool)
+        self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
+
+    def _update_sliding_window(self):
+        super()._update_sliding_window()
+        self._no_pushed -= self._sliding_push_received[self._sliding_window_index, :]
+
+        self._sliding_push_received[self._sliding_window_index, :] = False
+        self._sliding_push_received[self._sliding_window_index] = self._push_received_this_iteration
+        
     def _pick_arms(self):
         """Pushes the arms with the context. Uses the underlying PushMPTS
         algorithm to pick the arms.
@@ -799,6 +828,10 @@ class CPushMpts(PushMPTS):
 
         picked_arms_indicies = np.argsort(theta)[-self._L:]
 
+        if self._sliding_window_size is not None:
+            self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
+            self._push_received_this_iteration[picked_arms_indicies] = self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
+        
         self._no_pushed[picked_arms_indicies] += self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
 
         return picked_arms_indicies

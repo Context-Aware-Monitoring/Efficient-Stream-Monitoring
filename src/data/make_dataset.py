@@ -300,6 +300,31 @@ def _generate_cb():
     )
 
     _write_configs_for_policies(policies, name='cb', binary_rewards_only=True)
+
+def _generate_cdkegreedy():
+    policies = []
+
+    policies.extend(
+        get_cross_validated_policies(
+            {
+                'name': 'cdkegreedy',
+                'context_path':
+                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
+                'push_kind': 'plus',
+                'init_ev_likely_arms' : 0.8,
+                'init_ev_temporal_correlated_arms': 1.0,
+                'max_number_pushes': 100,
+                'push_kind' : 'multiply'
+            },
+            {
+                'epsilon': [0, 0.1],
+                'one_active_host_sufficient_for_push': [True, False],
+                'push': [1.0,1.2]
+            }
+        )
+    )
+
+    _write_configs_for_policies(policies, name='cdkegreedy')
     
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
@@ -307,7 +332,8 @@ def _generate_experiment_configs():
     _generate_mpts()
     _generate_egreedy()
     _generate_cb()
-
+    _generate_cdkegreedy()
+    
 
 def _write_config_for_params(
         seed: int,
