@@ -18,6 +18,7 @@ from .domain_knowledge import ArmKnowledge, PushArmKnowledge, GraphArmKnowledge,
 np.seterr(invalid='ignore')
 np.seterr(divide='ignore')
 
+
 def repeat_entry_L_times(X: np.ndarray, L: int) -> np.ndarray:
     return np.tile(X, L).reshape(-1, X.shape[1])
 
@@ -353,6 +354,11 @@ class EGreedy(AbstractBandit):
 
         self._recompute_expected_values()
 
+    def reset_policy(self):
+        self._expected_values = np.copy(self._init_expected_values)
+        self._sum_reward = np.zeros(self._K)
+        self._num_plays = np.zeros(self._K)
+
 
 class DKEGreedy(EGreedy):
     """E-Greedy bandit algorithm using domain knowledge to set the initial
@@ -507,7 +513,8 @@ class CDKEGreedy(DKEGreedy):
 
     def _init_sliding_window(self):
         if self._sliding_window_size is not None:
-            self._sliding_push_received = np.zeros(shape=(self._sliding_window_size, self._K), dtype=bool)
+            self._sliding_push_received = np.zeros(
+                shape=(self._sliding_window_size, self._K), dtype=bool)
             self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
 
     def _update_sliding_window(self):
@@ -516,7 +523,7 @@ class CDKEGreedy(DKEGreedy):
 
         self._sliding_push_received[self._sliding_window_index, :] = False
         self._sliding_push_received[self._sliding_window_index] = self._push_received_this_iteration
-        
+
     def pick_arms(self):
         """Pushes the arms with the context. Uses the underlying DKEgreedy
         algorithm to pick the arms.
@@ -549,7 +556,7 @@ class CDKEGreedy(DKEGreedy):
         if self._sliding_window_size is not None:
             self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
             self._push_received_this_iteration[picked_arms_indicies] = self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
-        
+
         self._no_pushed[picked_arms_indicies] += self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
 
         return picked_arm_indicies
@@ -569,6 +576,69 @@ class CDKEGreedy(DKEGreedy):
         host_name = 'one_host' if self._one_active_host_sufficient_for_push else 'two_host'
         return '%s_%s-c%.1f/%d_%s' % (
             host_name, self._push_kind, self._push, self._max_number_pushes, super().name)
+
+    def reset_policy(self):
+        super().reset_policy()
+        self._no_pushed = np.zeros(self._K)
+
+
+class AWCDKEGreedy(CDKEGreedy):
+
+    def __init__(
+            self,
+            L: int,
+            reward_df: pd.DataFrame,
+            random_seed: int,
+            context_df: pd.DataFrame,
+            epsilon: float = 0.1,
+            init_ev_likely_arms: float = 0.95,
+            init_ev_unlikely_arms: float = 0.75,
+            init_ev_temporal_correlated_arms: float = 1.0,
+            control_host: str = 'wally113',
+            push: float = 1.0,
+            max_number_pushes: int = 10,
+            push_kind: str = 'plus',
+            one_active_host_sufficient_for_push: bool = True,
+            mean_diviation=200,
+            sliding_window_size: int = None,
+            graph_knowledge: Knowledge = None,
+            identifier: typing.Optional[str] = None
+    ):
+        assert sliding_window_size is None
+
+        super().__init__(L, reward_df, random_seed, context_df, epsilon, init_ev_likely_arms,
+                         init_ev_unlikely_arms, init_ev_temporal_correlated_arms, control_host, push, max_number_pushes, push_kind, one_active_host_sufficient_for_push, sliding_window_size, graph_knowledge, identifier)
+        self._mean_diviation = mean_diviation
+        self._context_mean = None
+        self._size_aw = 0
+
+    def reset_policy(self):
+        super().reset_policy()
+        self._context_mean = None
+        self._size_aw = 0
+
+    def pick_arms(self):
+        current_context = self._context_df.values[self._iteration, :]
+        if self._context_mean is None:
+            self._context_mean = np.copy(current_context)
+        else:
+            diff = np.lingalg.norm(self._context_mean - current_context)
+            if diff > self._mean_diviation:
+                self.reset_policy()
+                self._context_mean = np.copy(current_context)
+            else:
+                self._context_mean = (
+                    (self._context_mean) * self._size_aw + current_context) / (self._size_aw + 1)
+
+        self._size_aw += 1
+        super().pick_arms()
+
+    @property
+    def name(self):
+        if self._identifier is not None:
+            return self._identifier
+
+        return '%d-mean-divition-%s' % (self._mean_diviation, super().name)
 
 
 class MPTS(AbstractBandit):
@@ -637,7 +707,8 @@ class MPTS(AbstractBandit):
         distribution. The arms that have the highest L random values get
         picked. Some arms never get explored.
         """
-        theta = self._rnd.beta(np.maximum(1.0, self._alpha + 1), np.maximum(1.0,self._beta + 1))
+        theta = self._rnd.beta(np.maximum(
+            1.0, self._alpha + 1), np.maximum(1.0, self._beta + 1))
 
         return np.argsort(theta)[-self._L:]
 
@@ -667,6 +738,10 @@ class MPTS(AbstractBandit):
         if self._graph_knowledge is not None:
             self._sliding_alpha[self._sliding_window_index] += self._alpha_update_through_neighbors
             self._sliding_beta[self._sliding_window_index] += self._beta_update_through_neighbors
+
+    def reset_policy(self):
+        self._alpha = np.zeros(self._K)
+        self._beta = np.zeros(self._K)
 
 
 class PushMPTS(MPTS):
@@ -754,10 +829,15 @@ class PushMPTS(MPTS):
         distribution. The arms that have the highest L random values get
         picked.
         """
-        theta = self._rnd.beta(np.maximum(1.0, self._alpha + 1), np.maximum(1.0,self._beta + 1))
+        theta = self._rnd.beta(np.maximum(
+            1.0, self._alpha + 1), np.maximum(1.0, self._beta + 1))
         theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
 
         return np.argsort(theta)[-self._L:]
+
+    def reset_policy(self):
+        self._alpha = self._compute_init_prior()
+        self._beta = self._compute_init_posterior()
 
 
 class CPushMpts(PushMPTS):
@@ -806,7 +886,8 @@ class CPushMpts(PushMPTS):
 
     def _init_sliding_window(self):
         if self._sliding_window_size is not None:
-            self._sliding_push_received = np.zeros(shape=(self._sliding_window_size, self._K), dtype=bool)
+            self._sliding_push_received = np.zeros(
+                shape=(self._sliding_window_size, self._K), dtype=bool)
             self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
 
     def _update_sliding_window(self):
@@ -815,7 +896,7 @@ class CPushMpts(PushMPTS):
 
         self._sliding_push_received[self._sliding_window_index, :] = False
         self._sliding_push_received[self._sliding_window_index] = self._push_received_this_iteration
-        
+
     def _pick_arms(self):
         """Pushes the arms with the context. Uses the underlying PushMPTS
         algorithm to pick the arms.
@@ -827,7 +908,8 @@ class CPushMpts(PushMPTS):
 
         alpha_pushed = self._alpha + self._arm_knowledge.arms_eligible_for_push * self._cpush
 
-        theta = self._rnd.beta(np.maximum(1.0, alpha_pushed + 1), np.maximum(1.0,self._beta + 1))
+        theta = self._rnd.beta(np.maximum(
+            1.0, alpha_pushed + 1), np.maximum(1.0, self._beta + 1))
         theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
 
         picked_arms_indicies = np.argsort(theta)[-self._L:]
@@ -835,7 +917,7 @@ class CPushMpts(PushMPTS):
         if self._sliding_window_size is not None:
             self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
             self._push_received_this_iteration[picked_arms_indicies] = self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
-        
+
         self._no_pushed[picked_arms_indicies] += self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
 
         return picked_arms_indicies
@@ -859,7 +941,67 @@ class CPushMpts(PushMPTS):
 
         host_name = 'one_host' if self._one_active_host_sufficient_for_push else 'two_host'
         return '%s_c%1.f/%d_%s' % (host_name, self._cpush, self._max_number_pushes,
-                                super().name)
+                                   super().name)
+
+    def reset_policy(self):
+        super().reset_policy()
+        self._no_pushed = np.zeros(self._K)
+
+
+class AWCPushMpts(CPushMpts):
+    def __init__(self,
+                 L: int,
+                 reward_df: pd.DataFrame,
+                 random_seed: int,
+                 context_df: pd.DataFrame,
+                 push_likely_arms: float = 1.0,
+                 push_unlikely_arms: float = 1.0,
+                 push_temporal_correlated_arms: float = 1.0,
+                 control_host: str = 'wally113',
+                 cpush: float = 1.0,
+                 q: int = 10,
+                 one_active_host_sufficient_for_push: bool = True,
+                 mean_diviation=200,
+                 sliding_window_size: int = None,
+                 graph_knowledge: Knowledge = None,
+                 identifier: typing.Optional[str] = None
+                 ):
+        assert sliding_window_size is None
+
+        super(L, reward_df, random_seed, context_df, push_likely_arms, push_unlikely_arms, push_temporal_correlated_arms,
+              control_host, cpush, q, one_active_host_sufficient_for_push, sliding_window_size, graph_knowledge, identifier)
+
+        self._mean_diviation = mean_diviation
+        self._context_mean = None
+        self._size_aw = 0
+
+    def reset_policy(self):
+        super().reset_policy()
+        self._context_mean = None
+        self._size_aw = 0
+
+    def pick_arms(self):
+        current_context = self._context_df.values[self._iteration, :]
+        if self._context_mean is None:
+            self._context_mean = np.copy(current_context)
+        else:
+            diff = np.lingalg.norm(self._context_mean - current_context)
+            if diff > self._mean_diviation:
+                self.reset_policy()
+                self._context_mean = np.copy(current_context)
+            else:
+                self._context_mean = (
+                    (self._context_mean) * self._size_aw + current_context) / (self._size_aw + 1)
+
+        self._size_aw += 1
+        super().pick_arms()
+
+    @property
+    def name(self):
+        if self._identifier is not None:
+            return self._identifier
+
+        return '%d-mean-divition-%s' % (self._mean_diviation, super().name)
 
 
 class CBAbstractBandit(AbstractBandit):

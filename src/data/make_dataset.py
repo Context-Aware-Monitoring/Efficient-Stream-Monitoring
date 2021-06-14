@@ -238,68 +238,103 @@ def _write_experiment_config(config: dict, name: str):
     with open('%s/%s.yml' % (global_config.EXPERIMENT_CONFIG_DIR, name), 'w') as yml_file:
         yaml.dump(config, yml_file, default_flow_style=False)
 
+
 def _generate_mpts():
     policies = []
     policies.extend(get_cross_validated_policies(
         {'name': 'mpts'},
         {
             'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-            'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES            
+            'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
         }
     ))
 
     policies.extend(
         get_cross_validated_policies(
-            {'name': 'push-mpts', 'push_likely_arms' : 0.0, 'push_temporal_correlated_arms' : 1.0, 'push_unlikely_arms': 10},
+            {'name': 'push-mpts', 'push_likely_arms': 0.0,
+                'push_temporal_correlated_arms': 1.0, 'push_unlikely_arms': 10},
             {
                 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-                'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES                
+                'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
             }
         )
     )
 
-    _write_configs_for_policies(policies, name='mpts')    
+    _write_configs_for_policies(policies, name='mpts')
+
 
 def _generate_egreedy():
     policies = []
     policies.extend(get_cross_validated_policies(
         {'name': 'egreedy'},
         {
-            'epsilon' : [0.0, 0.1, 0.2],
-            'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES,
-            'sliding_window_size' : global_config.SLIDING_WINDOW_SIZES
+            'epsilon': [0.0, 0.1, 0.2],
+            'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES,
+            'sliding_window_size': global_config.SLIDING_WINDOW_SIZES
         }
     ))
 
     policies.extend(
         get_cross_validated_policies(
-            {'name': 'dkegreedy', 'init_ev_temporal_correlated_arms': 1.0, 'init_ev_likely_arms' : 0.8, 'init_ev_unlikely_arms': 0.5},
+            {'name': 'dkegreedy', 'init_ev_temporal_correlated_arms': 1.0,
+                'init_ev_likely_arms': 0.8, 'init_ev_unlikely_arms': 0.5},
             {
                 'epsilon': [0.0, 0.1, 0.2],
-                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES,
-                'sliding_window_size' : global_config.SLIDING_WINDOW_SIZES                
+                'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES,
+                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES
 
-           } 
+            }
         )
     )
 
+    _write_configs_for_policies(policies, name='egreedy')
 
-    _write_configs_for_policies(policies, name='egreedy')    
 
 def _generate_cb():
     policies = []
+
     policies.extend(
         get_cross_validated_policies(
             {'name': 'cb-full-model',
              'context_path': global_config.DATA_DIR
              + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
              'context_identifier': 'workload'
-            },
-            {'base_algorithm_name' : ['logistic_regression', 'ridge', 'ard_regression', 'lin_svc', 'ridge_classifier'], 'algorithm_name' : ['egreedy', 'bootstrapped_ucb']}
+             },
+            {'base_algorithm_name': ['logistic_regression', 'ridge', 'ard_regression',
+                                     'lin_svc', 'ridge_classifier'], 'algorithm_name': ['egreedy', 'bootstrapped_ucb']}
         )
     )
 
     _write_configs_for_policies(policies, name='cb', binary_rewards_only=True)
+
+
+def _generate_awcdkegreedy():
+    policies = []
+
+    policies.extend(
+        get_cross_validated_policies(
+            {
+                'name': 'awcdkegreedy',
+                'context_path':
+                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
+                'push_kind': 'plus',
+                'init_ev_likely_arms': 0.8,
+                'init_ev_temporal_correlated_arms': 1.0,
+                'max_number_pushes': 100,
+                'push_kind': 'multiply',
+                'one_active_host_sufficient_for_push': True,
+                'mean_diviation': 1000
+            },
+            {
+                'epsilon': [0, 0.1],
+                'push': [1.0, 1.2],
+                'graph_knowledge': [{'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}, None]
+            }
+        )
+    )
+
+    _write_configs_for_policies(policies, name='awcdkegreedy')
+
 
 def _generate_cdkegreedy():
     policies = []
@@ -311,15 +346,15 @@ def _generate_cdkegreedy():
                 'context_path':
                 global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
                 'push_kind': 'plus',
-                'init_ev_likely_arms' : 0.8,
+                'init_ev_likely_arms': 0.8,
                 'init_ev_temporal_correlated_arms': 1.0,
                 'max_number_pushes': 100,
-                'push_kind' : 'multiply'
+                'push_kind': 'multiply'
             },
             {
                 'epsilon': [0, 0.1],
                 'one_active_host_sufficient_for_push': [True, False],
-                'push': [1.0,1.2],
+                'push': [1.0, 1.2],
                 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
                 'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
             }
@@ -327,6 +362,34 @@ def _generate_cdkegreedy():
     )
 
     _write_configs_for_policies(policies, name='cdkegreedy')
+
+
+def _generate_awcpush_mpts():
+    policies = []
+
+    policies.extend(
+        get_cross_validated_policies(
+            {
+                'name': 'awcpush-mpts',
+                'context_path':
+                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
+                'push_likely_arms': 0,
+                'push_unlikely_arms': 10,
+                'push_temporal_correlated_arms': 1.0,
+                'q': 100,
+                'mean_diviation': 1000
+            },
+            {
+                'one_active_host_sufficient_for_push': [True, False],
+                'cpush': [0, 1],
+                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
+                'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
+            }
+        )
+    )
+
+    _write_configs_for_policies(policies, name='awcpush_mpts')
+
 
 def _generate_cpush_mpts():
     policies = []
@@ -337,31 +400,34 @@ def _generate_cpush_mpts():
                 'name': 'cpush-mpts',
                 'context_path':
                 global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
-                'push_likely_arms' : 0,
-                'push_unlikely_arms' : 10,                
+                'push_likely_arms': 0,
+                'push_unlikely_arms': 10,
                 'push_temporal_correlated_arms': 1.0,
                 'q': 100
             },
             {
                 'one_active_host_sufficient_for_push': [True, False],
-                'cpush': [0,1],
+                'cpush': [0, 1],
                 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
                 'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
             }
         )
     )
 
-    _write_configs_for_policies(policies, name='cpush_mpts')    
-    
+    _write_configs_for_policies(policies, name='cpush_mpts')
+
+
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
-    _generate_mpts()
-    _generate_egreedy()
-    _generate_cb()
-    _generate_cdkegreedy()
-    _generate_cpush_mpts()
-    
+    # _generate_mpts()
+    # _generate_egreedy()
+    # _generate_cb()
+    # _generate_cdkegreedy()
+    # _generate_cpush_mpts()
+    _generate_awcdkegreedy()
+    _generate_awcpush_mpts()
+
 
 def _write_config_for_params(
         seed: int,
