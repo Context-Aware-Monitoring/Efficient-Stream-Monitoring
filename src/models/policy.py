@@ -968,7 +968,7 @@ class AWCPushMpts(CPushMpts):
                  ):
         assert sliding_window_size is None
 
-        super(L, reward_df, random_seed, context_df, push_likely_arms, push_unlikely_arms, push_temporal_correlated_arms,
+        super().__init__(L, reward_df, random_seed, context_df, push_likely_arms, push_unlikely_arms, push_temporal_correlated_arms,
               control_host, cpush, q, one_active_host_sufficient_for_push, sliding_window_size, graph_knowledge, identifier)
 
         self._mean_diviation = mean_diviation
