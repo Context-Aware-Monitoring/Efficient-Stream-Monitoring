@@ -238,57 +238,70 @@ def _write_experiment_config(config: dict, name: str):
     with open('%s/%s.yml' % (global_config.EXPERIMENT_CONFIG_DIR, name), 'w') as yml_file:
         yaml.dump(config, yml_file, default_flow_style=False)
 
-
-def _generate_mpts():
+def _generate_mpts_parameter_optimization():
     policies = []
     policies.extend(get_cross_validated_policies(
-        {'name': 'mpts'},
+        {'name': 'push-mpts'},
         {
-            'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-            'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
-        }
-    ))
+            'push_likely_arms': [0,5,10],
+            'push_temporal_correlated_arms': [0,5,10],
+            'push_unlikely_arms': [0,5,10]
+        }))
+
+    _write_configs_for_policies(policies, name='mpts_parameter_tuning')
+
+def _generate_egreedy_parameter_optimization():
+    policies = []
+
+    policies.extend(get_cross_validated_policies(
+        {'name': 'cdkegreedy'},
+        {
+            'epsilon' : [0.0,0.1],
+            'init_ev_likely_arms': [0.8,1.0],
+            'init_ev_temporal_correlated_arms': [0.8,1.0],
+            'init_ev_unlikely_arms': [0.0,0.5],
+        }))
+
+    _write_configs_for_policies(policies, name='mpts_parameter_tuning')
+
+def _generate_mpts():
+    policies = [{'name': 'mpts', 'graph_knowledge': {'name' : 'add', 'n_affected' : 15}}]
 
     policies.extend(
         get_cross_validated_policies(
             {'name': 'push-mpts', 'push_likely_arms': 0.0,
-                'push_temporal_correlated_arms': 1.0, 'push_unlikely_arms': 10},
+                'push_unlikely_arms': 10},
             {
+                'push_temporal_correlated_arms': [0,1,5],
                 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
                 'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
             }
         )
     )
 
-    _write_configs_for_policies(policies, name='mpts')
+    _write_configs_for_policies(policies, name='wgk_mpts')
 
 
 def _generate_egreedy():
     policies = []
+
     policies.extend(get_cross_validated_policies(
-        {'name': 'egreedy'},
+        {'name' : 'egreedy'},
+        {'epsilon' : [0,0.1]}
+    ))
+    
+    policies.extend(get_cross_validated_policies(
+        {'name': 'dkegreedy'},
         {
-            'epsilon': [0.0, 0.1, 0.2],
+            'epsilon' : [0.0,0.1],
+            'init_ev_likely_arms': [0.8,1.0],
+            'init_ev_temporal_correlated_arms': [0.8,1.0],
+            'init_ev_unlikely_arms': [0.0,0.5],
             'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES,
             'sliding_window_size': global_config.SLIDING_WINDOW_SIZES
-        }
-    ))
-
-    policies.extend(
-        get_cross_validated_policies(
-            {'name': 'dkegreedy', 'init_ev_temporal_correlated_arms': 1.0,
-                'init_ev_likely_arms': 0.8, 'init_ev_unlikely_arms': 0.5},
-            {
-                'epsilon': [0.0, 0.1, 0.2],
-                'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES,
-                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES
-
-            }
-        )
-    )
-
+        }))
+    
     _write_configs_for_policies(policies, name='egreedy')
-
 
 def _generate_cb():
     policies = []
@@ -382,7 +395,6 @@ def _generate_awcpush_mpts():
             {
                 'one_active_host_sufficient_for_push': [True, False],
                 'cpush': [0, 1],
-                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
                 'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
             }
         )
@@ -420,13 +432,14 @@ def _generate_cpush_mpts():
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
-    # _generate_mpts()
-    # _generate_egreedy()
+    # _generate_mpts_parameter_optimization()
+    _generate_mpts()
+    _generate_egreedy()
     # _generate_cb()
     # _generate_cdkegreedy()
     # _generate_cpush_mpts()
-    _generate_awcdkegreedy()
-    _generate_awcpush_mpts()
+    # _generate_awcdkegreedy()
+    # _generate_awcpush_mpts()
 
 
 def _write_config_for_params(

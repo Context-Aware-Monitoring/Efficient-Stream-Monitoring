@@ -4,14 +4,14 @@ from itertools import product
 
 HOSTS = ['wally113', 'wally117', 'wally122', 'wally123', 'wally124']
 
-WINDOW_SIZES = [15, 30, 60]
-WINDOW_STEPS = [5, 10, 15]
+WINDOW_SIZES = [60]
+WINDOW_STEPS = [1]
 
 Ls = [1,5,10,20,50,100]
-THRESHOLDS = [0.6,0.7,0.8]
-REWARD_KINDS = ['continous', 'top', 'threshold']
+THRESHOLDS = [0.7]
+REWARD_KINDS = ['continous', 'threshold']
 BINARY_REWARD_KINDS = ['top', 'threshold']
-SEQ = [True, False]
+SEQ = [True]
 
 DATA_DIR = '%s/data' % (dirname(dirname(abspath(__file__))))
 REWARDS_DIR = '%s/processed/rewards' % DATA_DIR
@@ -25,30 +25,26 @@ END_TRACES_SEQUENTIAL = np.datetime64('2019-11-20 01:30:00')
 START_TRACES_CONCURRENT = np.datetime64('2019-11-25 15:12:13')
 END_TRACES_CONCURRENT = np.datetime64('2019-11-25 19:45:00')
 
-SLIDING_WINDOW_SIZES = [None, 100, 250, 500]
+SLIDING_WINDOW_SIZES = [None, 500]
 
 GRAPH_DOMAIN_KNOWLEDGES = [
     None
 ]
 
 GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'correct', 'weight': weight} for weight in [0.2,0.5,0.8,1.0]
+    {'name' : 'correct', 'weight': weight} for weight in [0.8,1.0]
 ])
 
 GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'flip', 'weight': weight, 'n_affected' : n_affected} for weight, n_affected in product([0.2,0.5,0.8,1.0], [10,100,1000])
+    {'name' : 'unify', 'weight': weight, 'n_affected' : n_affected} for weight, n_affected in product([0.8,1.0], [1,2,5,10])
 ])
 
 GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'unify', 'weight': weight, 'n_affected' : n_affected} for weight, n_affected in product([0.2,0.5,0.8,1.0], [1,2,5,10])
+    {'name' : 'add', 'weight': weight, 'n_affected' : n_affected} for weight, n_affected in product([0.2,0.5,0.8,1.0], [1,2,5,10,15])
 ])
 
 GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'add', 'weight': weight, 'n_affected' : n_affected} for weight, n_affected in product([0.2,0.5,0.8,1.0], [1,2,5,10])
-])
-
-GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'remove', 'weight': weight, 'n_affected' : n_affected} for weight, n_affected in product([0.2,0.5,0.8,1.0], [1,5,10,20,50])
+    {'name' : 'remove', 'weight': weight, 'n_affected' : n_affected} for weight, n_affected in product([0.8,1.0], [1,5,10,20,50,100,200,300,420])
 ])
 
 
