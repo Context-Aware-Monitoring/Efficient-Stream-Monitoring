@@ -7,7 +7,7 @@ HOSTS = ['wally113', 'wally117', 'wally122', 'wally123', 'wally124']
 WINDOW_SIZES = [60]
 WINDOW_STEPS = [1]
 
-Ls = [1,5,10,20,50,100]
+Ls = [1,3,8,10,12,14,16,18,20,25,30,35]
 THRESHOLDS = [0.7]
 REWARD_KINDS = ['continous', 'threshold']
 BINARY_REWARD_KINDS = ['top', 'threshold']
@@ -17,6 +17,7 @@ DATA_DIR = '%s/data' % (dirname(dirname(abspath(__file__))))
 REWARDS_DIR = '%s/processed/rewards' % DATA_DIR
 EXPERIMENT_CONFIG_DIR = '%s/interim/experiment_configs' % DATA_DIR
 EXPERIMENT_SERIALIZATION_DIR = '%s/processed/experiment_results/' % DATA_DIR
+EXPERIMENT_SERIALIZATION_ADDED_DIR = '%s/processed/experiment_results/added' % DATA_DIR
 
 
 START_TRACES_SEQUENTIAL = np.datetime64('2019-11-19 17:38:39')

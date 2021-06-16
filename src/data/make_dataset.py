@@ -265,21 +265,22 @@ def _generate_egreedy_parameter_optimization():
     _write_configs_for_policies(policies, name='mpts_parameter_tuning')
 
 def _generate_mpts():
-    policies = [{'name': 'mpts', 'graph_knowledge': {'name' : 'add', 'n_affected' : 15}}]
+    # policies = [{'name': 'mpts', 'graph_knowledge': {'name' : 'add', 'n_affected' : 15}}]
 
-    policies.extend(
-        get_cross_validated_policies(
-            {'name': 'push-mpts', 'push_likely_arms': 0.0,
-                'push_unlikely_arms': 10},
-            {
-                'push_temporal_correlated_arms': [0,1,5],
-                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-                'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
-            }
-        )
-    )
+    # policies.extend(
+    #     get_cross_validated_policies(
+    #         {'name': 'push-mpts', 'push_likely_arms': 0.0,
+    #             'push_unlikely_arms': 10},
+    #         {
+    #             'push_temporal_correlated_arms': [0,1,5],
+    #             'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
+    #             'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
+    #         }
+    #     )
+    # )
+    policies = [{'name' : 'mpts'}]
 
-    _write_configs_for_policies(policies, name='wgk_mpts')
+    _write_configs_for_policies(policies, name='mpts')
 
 
 def _generate_egreedy():
@@ -361,20 +362,46 @@ def _generate_cdkegreedy():
                 'push_kind': 'plus',
                 'init_ev_likely_arms': 0.8,
                 'init_ev_temporal_correlated_arms': 1.0,
-                'max_number_pushes': 100,
+                'init_ev_unlikely_arms': 0.5,
                 'push_kind': 'multiply'
             },
             {
                 'epsilon': [0, 0.1],
                 'one_active_host_sufficient_for_push': [True, False],
-                'push': [1.0, 1.2],
-                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-                'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
+                'push': [1.0, 1.1, 1.2],
+                'max_number_pushes': [10,100,1000]
+                # 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
+                # 'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
             }
         )
     )
 
     _write_configs_for_policies(policies, name='cdkegreedy')
+
+def _generate_sim_cdkegreedy():
+    policies = []
+
+    policies.extend(
+        get_cross_validated_policies(
+            {
+                'name': 'cdkegreedy',
+                'context_path':
+                global_config.DATA_DIR + '/processed/context/%s_context_sim_w%d_s%d.csv',
+                'push_kind': 'plus',
+                'init_ev_likely_arms': 0.8,
+                'init_ev_temporal_correlated_arms': 1.0,
+                'kind_knowledge': 'sim'
+            },
+            {
+                'epsilon': [0, 0.1],
+                'push': [0.01,0.05,0.1,0.2],
+                'threshold': [100,1000,2000,5000],
+                'max_number_pushes': [10,100,1000]
+            }
+        )
+    )
+
+    _write_configs_for_policies(policies, name='sim_cdkegreedy')    
 
 
 def _generate_awcpush_mpts():
@@ -414,30 +441,56 @@ def _generate_cpush_mpts():
                 global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
                 'push_likely_arms': 0,
                 'push_unlikely_arms': 10,
-                'push_temporal_correlated_arms': 1.0,
-                'q': 100
+                'push_temporal_correlated_arms': 1.0
             },
             {
+                'q': [10,100,1000],
                 'one_active_host_sufficient_for_push': [True, False],
-                'cpush': [0, 1],
-                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-                'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
+                'cpush': [1, 5, 10]
+                # 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
+                # 'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
             }
         )
     )
 
     _write_configs_for_policies(policies, name='cpush_mpts')
 
+def _generate_sim_cpush_mpts():
+    policies = []
+
+    policies.extend(
+        get_cross_validated_policies(
+            {
+                'name': 'cpush-mpts',
+                'context_path':
+                global_config.DATA_DIR + '/processed/context/%s_context_sim_w%d_s%d.csv',
+                'push_likely_arms': 0,
+                'push_unlikely_arms': 5,
+                'push_temporal_correlated_arms': 5,
+                'kind_knowledge': 'sim'
+            },
+            {
+                'q': [10,100,1000],
+                'cpush': [1,5,10],
+                'threshold': [100,1000,2000,5000]
+            }
+        )
+    )
+
+    _write_configs_for_policies(policies, name='sim_cpush_mpts')    
+
 
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
     # _generate_mpts_parameter_optimization()
-    _generate_mpts()
-    _generate_egreedy()
+    # _generate_mpts()
+    # _generate_egreedy()
+    _generate_sim_cpush_mpts()
+    _generate_sim_cdkegreedy()
     # _generate_cb()
-    # _generate_cdkegreedy()
-    # _generate_cpush_mpts()
+    _generate_cdkegreedy()
+    _generate_cpush_mpts()
     # _generate_awcdkegreedy()
     # _generate_awcpush_mpts()
 

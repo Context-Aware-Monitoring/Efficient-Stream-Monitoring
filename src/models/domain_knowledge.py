@@ -1,6 +1,7 @@
 import typing
 from typing import List, Tuple
 import numpy as np
+import re
 
 
 def extract_hosts_from_arm(arm: str) -> Tuple[str, str]:
@@ -216,13 +217,14 @@ class PushArmKnowledge(DynamicArmKnowledge):
                  ):
         super().__init__(arms, control_host)
         self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
+        self._interesting_metrics = np.isin(self._metrics_for_arm, ['cpu.user', 'mem.used', 'load.min1', 'load.min5', 'load.min15']).all(axis=1)
         self._arms_eligible_for_push = self._compute_arms_eligible_for_push()
 
     def _compute_arms_eligible_for_push(self):
         if self._one_active_host_sufficient_for_push:
-            return self._hosts_active_for_arm.any(axis=1)
+            return np.logical_and(self._hosts_active_for_arm.any(axis=1), self._interesting_metrics)
         else:
-            return self._hosts_active_for_arm.all(axis=1)
+            return np.logical_and(self._hosts_active_for_arm.all(axis=1), self._interesting_metrics)                                           
 
     def recompute_properties(self):
         self._arms_eligible_for_push = self._compute_arms_eligible_for_push()
@@ -233,6 +235,68 @@ class PushArmKnowledge(DynamicArmKnowledge):
         return self._arms_eligible_for_push
 
 
+class SimiliarPushArmKnowledge(DynamicArmKnowledge):
+    arms_eligible_for_push: np.ndarray
+    arms_eligible_for_anti_push: np.ndarray
+    threshold : int
+    
+    def __init__(self, arms, threshold, columns, control_host='wally113'):
+        super().__init__(arms, control_host)
+        self._columns = columns
+        self._threshold = threshold
+        self._compute_push_matrix()
+        
+        self._arms_eligible_for_push = np.zeros(self._K, dtype=bool)
+        self._arms_eligible_for_anti_push = np.zeros(self._K, dtype=bool)        
+
+    def _compute_arms_eligible_for_push(self, similiary):
+        self._arms_eligible_for_push = self._matrix[:, similiary < self._threshold].any(axis=1)
+        self._arms_eligible_for_anti_push = self._matrix[:, similiary >= self._threshold].any(axis=1)
+
+        
+        
+    def _compute_push_matrix(self):
+        self._matrix = np.zeros(shape=(self._K, self._columns.shape[0]), dtype=bool)
+        for i, c in enumerate(self._columns):
+            h1, h2 = c.split('.')[0].split('-')
+
+            minute = int(re.findall('\d+min', c)[0].split('min')[0])
+
+
+            if minute == 1:
+                self._matrix[:, i] = np.logical_and(
+                    np.isin(self._hosts_for_arm, [h1,h2]).all(axis=1),
+                    np.isin(self._metrics_for_arm, ['mem.used', 'cpu.user', 'load.min1']).all(axis=1)
+                )
+            elif minute == 5:
+                self._matrix[:, i] = np.logical_and(
+                    np.isin(self._hosts_for_arm, [h1,h2]).all(axis=1),
+                    np.isin(self._metrics_for_arm, ['mem.used', 'cpu.user', 'load.min5']).all(axis=1)
+                )
+            elif minute == 15:
+                self._matrix[:, i] = np.logical_and(
+                    np.isin(self._hosts_for_arm, [h1,h2]).all(axis=1),
+                    np.isin(self._metrics_for_arm, ['mem.used', 'cpu.user', 'load.min15']).all(axis=1)
+                )                    
+
+            
+    def compute_arms_eligible_for_push(similiarity: List[float]):
+        self._arms_eligible_for_push = self._matrix[:, similiarity < threshold].any(axis=1)
+
+    @property
+    def threshold(self) -> int:
+        return self._threshold
+        
+    @property
+    def arms_eligible_for_push(self) -> np.ndarray:
+        """Returns for each arm whether or not it is eligible for a push."""
+        return self._arms_eligible_for_push
+
+    @property
+    def arms_eligible_for_anti_push(self) -> np.ndarray:
+        """Returns for each arm whether or not it is eligible for a push."""
+        return self._arms_eligible_for_anti_push    
+    
 class GraphArmKnowledge(DynamicArmKnowledge):
     """Contains the neighbors for each arm. Arms are neighbors if they are
     in the same group. Groups are defined based on the type of host (control,

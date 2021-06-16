@@ -13,7 +13,7 @@ import itertools
 import pandas as pd
 import typing
 from typing import List, Tuple
-from .domain_knowledge import ArmKnowledge, PushArmKnowledge, GraphArmKnowledge, RandomGraphKnowledge, Knowledge
+from .domain_knowledge import ArmKnowledge, PushArmKnowledge, GraphArmKnowledge, RandomGraphKnowledge, Knowledge, SimiliarPushArmKnowledge
 
 np.seterr(invalid='ignore')
 np.seterr(divide='ignore')
@@ -477,7 +477,9 @@ class CDKEGreedy(DKEGreedy):
             one_active_host_sufficient_for_push: bool = True,
             sliding_window_size: int = None,
             graph_knowledge: Knowledge = None,
-            identifier: typing.Optional[str] = None
+            kind_knowledge = 'push',
+            identifier: typing.Optional[str] = None,
+            **kwargs
     ):
         """
         Args:
@@ -500,11 +502,15 @@ class CDKEGreedy(DKEGreedy):
             graph_knowledge=graph_knowledge,
             identifier=identifier
         )
-
-        self._arm_knowledge = PushArmKnowledge(
-            self._arms, one_active_host_sufficient_for_push, control_host)
-        self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
+        
         self._context_df = context_df
+        self._kind_knowledge = kind_knowledge
+        if kind_knowledge == 'push':
+            self._arm_knowledge = PushArmKnowledge(
+                self._arms, one_active_host_sufficient_for_push, control_host)
+        elif kind_knowledge == 'sim':
+            self._arm_knowledge = SimiliarPushArmKnowledge(self._arms, kwargs['threshold'], self._context_df.columns.values, control_host)
+        self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
         self._no_pushed = np.zeros(self._K)
         self._push = push
         self._max_number_pushes = max_number_pushes
@@ -535,18 +541,28 @@ class CDKEGreedy(DKEGreedy):
 
     def _push_and_pick_arms(self):
         current_context = self._context_df.values[self._iteration, :]
-        active_hosts = self._context_df.columns.values[current_context > 0]
 
-        self._arm_knowledge.update_active_hosts(active_hosts)
+        if isinstance(self._arm_knowledge, SimiliarPushArmKnowledge):
+            self._arm_knowledge._compute_arms_eligible_for_push(current_context)
+        elif isinstance(self._arm_knowledge, PushArmKnowledge):
+            active_hosts = self._context_df.columns.values[current_context > 0]
+            self._arm_knowledge.update_active_hosts(active_hosts)
 
         arm_gets_pushed = np.logical_and(
             self._arm_knowledge.arms_eligible_for_push,
             self._no_pushed < self._max_number_pushes
         )
 
+        # arm_gets_anti_pushed = np.logical_and(
+        #     self._arm_knowledge.arms_eligible_for_anti_push,
+        #     self._no_pushed < self._max_number_pushes
+        # )
+
         if self._push_kind == 'plus':
-            pushed_expected_values = self._expected_values + \
-                (self._push * arm_gets_pushed)
+            pushed_expected_values[arm_gets_pushed] = self._expected_values[arm_gets_pushed] + \
+                (self._push * arm_gets_pushed[arm_gets_pushed])
+            # pushed_expected_values[arm_gets_anti_pushed] = self._expected_values[arm_gets_anti_pushed] - \
+            #     (self._push * arm_gets_anti_pushed[arm_gets_anti_pushed])            
         else:
             factors = np.where(arm_gets_pushed, self._push, 1.0)
             pushed_expected_values *= factors
@@ -573,9 +589,10 @@ class CDKEGreedy(DKEGreedy):
         if self._identifier is not None:
             return self._identifier
 
+        kind_str = 'push' if isinstance(self._arm_knowledge, PushArmKnowledge) else 'sim-%d' % self._arm_knowledge.threshold
         host_name = 'one_host' if self._one_active_host_sufficient_for_push else 'two_host'
-        return '%s_%s-c%.1f/%d_%s' % (
-            host_name, self._push_kind, self._push, self._max_number_pushes, super().name)
+        return '%s-%s_%s-c%.1f/%d_%s' % (
+            kind_str, host_name, self._push_kind, self._push, self._max_number_pushes, super().name)
 
     def reset_policy(self):
         super().reset_policy()
@@ -861,7 +878,9 @@ class CPushMpts(PushMPTS):
                  one_active_host_sufficient_for_push: bool = True,
                  sliding_window_size: int = None,
                  graph_knowledge: Knowledge = None,
-                 identifier: typing.Optional[str] = None
+                 kind_knowledge = 'push',
+                 identifier: typing.Optional[str] = None,
+                 **kwargs
                  ):
         """Constructs the contextual push MPTS algorithm.
 
@@ -875,10 +894,17 @@ class CPushMpts(PushMPTS):
                          push_unlikely_arms, push_temporal_correlated_arms,
                          control_host, sliding_window_size=sliding_window_size,
                          graph_knowledge=graph_knowledge, identifier=identifier)
-        self._arm_knowledge = PushArmKnowledge(
-            self._arms, one_active_host_sufficient_for_push, control_host)
-        self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
+        assert reward_df.values.shape[0] == context_df.values.shape[0]
+        
         self._context_df = context_df
+        self._kind_knowledge = kind_knowledge
+        if kind_knowledge == 'push':
+            self._arm_knowledge = PushArmKnowledge(
+                self._arms, one_active_host_sufficient_for_push, control_host)
+        elif kind_knowledge == 'sim':
+            self._arm_knowledge = SimiliarPushArmKnowledge(self._arms, kwargs['threshold'], self._context_df.columns.values, control_host)
+            
+        self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
         self._cpush = cpush
         self._max_number_pushes = q
         self._no_pushed = np.zeros(self._K)
@@ -902,12 +928,28 @@ class CPushMpts(PushMPTS):
         algorithm to pick the arms.
         """
         current_context = self._context_df.values[self._iteration, :]
-        active_hosts = self._context_df.columns.values[current_context > 0]
 
-        self._arm_knowledge.update_active_hosts(active_hosts)
+        if isinstance(self._arm_knowledge, SimiliarPushArmKnowledge):
+            self._arm_knowledge._compute_arms_eligible_for_push(current_context)
+        elif isinstance(self._arm_knowledge, PushArmKnowledge):
+            active_hosts = self._context_df.columns.values[current_context > 0]
+            self._arm_knowledge.update_active_hosts(active_hosts)
 
-        alpha_pushed = self._alpha + self._arm_knowledge.arms_eligible_for_push * self._cpush
+        arm_gets_pushed = np.logical_and(
+            self._arm_knowledge.arms_eligible_for_push,
+            self._no_pushed < self._max_number_pushes
+        )
 
+        # arm_gets_anti_pushed = np.logical_and(
+        #     self._arm_knowledge.arms_eligible_for_anti_push,
+        #     self._no_pushed < self._max_number_pushes
+        # )
+
+        alpha_pushed = self._alpha + arm_gets_pushed * self._cpush
+        # beta_pushed = self._beta + (arm_gets_anti_pushed * self._cpush)
+        
+        # theta = self._rnd.beta(np.maximum(
+        #     1.0, alpha_pushed + 1), np.maximum(1.0, beta_pushed + 1))
         theta = self._rnd.beta(np.maximum(
             1.0, alpha_pushed + 1), np.maximum(1.0, self._beta + 1))
         theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
@@ -939,8 +981,9 @@ class CPushMpts(PushMPTS):
         if self._identifier is not None:
             return self._identifier
 
+        kind_str = 'push' if isinstance(self._arm_knowledge, PushArmKnowledge) else 'sim-%d' % self._arm_knowledge.threshold
         host_name = 'one_host' if self._one_active_host_sufficient_for_push else 'two_host'
-        return '%s_c%1.f/%d_%s' % (host_name, self._cpush, self._max_number_pushes,
+        return '%s-%s_c%1.f/%d_%s' % (kind_str, host_name, self._cpush, self._max_number_pushes,
                                    super().name)
 
     def reset_policy(self):
