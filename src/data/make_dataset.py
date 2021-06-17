@@ -266,21 +266,22 @@ def _generate_egreedy_parameter_optimization():
 
 def _generate_mpts():
     # policies = [{'name': 'mpts', 'graph_knowledge': {'name' : 'add', 'n_affected' : 15}}]
+    policies = []
+    
+    policies.extend(
+        get_cross_validated_policies(
+            {'name': 'push-mpts', 'push_likely_arms': 0.0,
+                'push_unlikely_arms': 10},
+            {
+                'push_temporal_correlated_arms': [0,1,5],
+                # 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
+                # 'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
+            }
+        )
+    )
+    policies.extend([{'name' : 'mpts'}])
 
-    # policies.extend(
-    #     get_cross_validated_policies(
-    #         {'name': 'push-mpts', 'push_likely_arms': 0.0,
-    #             'push_unlikely_arms': 10},
-    #         {
-    #             'push_temporal_correlated_arms': [0,1,5],
-    #             'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-    #             'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
-    #         }
-    #     )
-    # )
-    policies = [{'name' : 'mpts'}]
-
-    _write_configs_for_policies(policies, name='mpts')
+    _write_configs_for_policies(policies, name='mpts_baseline')
 
 
 def _generate_egreedy():
@@ -298,11 +299,11 @@ def _generate_egreedy():
             'init_ev_likely_arms': [0.8,1.0],
             'init_ev_temporal_correlated_arms': [0.8,1.0],
             'init_ev_unlikely_arms': [0.0,0.5],
-            'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES,
-            'sliding_window_size': global_config.SLIDING_WINDOW_SIZES
+            # 'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES,
+            # 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES
         }))
     
-    _write_configs_for_policies(policies, name='egreedy')
+    _write_configs_for_policies(policies, name='egreedy_baseline')
 
 def _generate_cb():
     policies = []
@@ -484,8 +485,8 @@ def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
     # _generate_mpts_parameter_optimization()
-    # _generate_mpts()
-    # _generate_egreedy()
+    _generate_mpts()
+    _generate_egreedy()
     _generate_sim_cpush_mpts()
     _generate_sim_cdkegreedy()
     # _generate_cb()
