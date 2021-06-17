@@ -7,7 +7,7 @@ HOSTS = ['wally113', 'wally117', 'wally122', 'wally123', 'wally124']
 WINDOW_SIZES = [60]
 WINDOW_STEPS = [1]
 
-Ls = np.arange(35)
+Ls = list(np.arange(1,35))
 THRESHOLDS = [0.6, 0.7]
 REWARD_KINDS = ['continous', 'threshold', 'top']
 BINARY_REWARD_KINDS = ['top', 'threshold']
