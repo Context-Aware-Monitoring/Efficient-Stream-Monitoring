@@ -7,7 +7,7 @@ HOSTS = ['wally113', 'wally117', 'wally122', 'wally123', 'wally124']
 WINDOW_SIZES = [60]
 WINDOW_STEPS = [1]
 
-Ls = [1,3,8,10,12,14,16,18,20,25,30,35]
+Ls = [21,22,23,24,26,27,28,29,31,32,33,34]
 THRESHOLDS = [0.7]
 REWARD_KINDS = ['continous', 'threshold']
 BINARY_REWARD_KINDS = ['top', 'threshold']
