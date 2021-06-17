@@ -272,18 +272,23 @@ def _generate_mpts():
         get_cross_validated_policies(
             {'name': 'mpts'},
             {
-                'graph_knowledge' : [{'name' : 'correct', 'weight': weight} for weight in [0.8,1.0]]
-                # 'push_unlikely_arms': [0,1,5],
-                # 'push_temporal_correlated_arms': [0,1,5],
-                # 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-                # 'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
+                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES
+                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES
             }
         )
     )
 
-
-
-    _write_configs_for_policies(policies, name='gk_mpts_baseline')
+    policies.extend(
+        get_cross_validated_policies(
+            {'name': 'push-mpts'},
+            {
+                'push_unlikely_arms': [0,5,10],
+                'push_temporal_correlated_arms': [0,1,5,10]
+            }
+        )
+    )
+    
+    _write_configs_for_policies(policies, name='mpts')
 
 
 def _generate_egreedy():
@@ -468,14 +473,15 @@ def _generate_sim_cpush_mpts():
                 'context_path':
                 global_config.DATA_DIR + '/processed/context/%s_context_sim_w%d_s%d.csv',
                 'push_likely_arms': 0,
-                'push_unlikely_arms': 5,
-                'push_temporal_correlated_arms': 5,
+                'push_unlikely_arms': 0,
+                'push_temporal_correlated_arms': 0,
                 'kind_knowledge': 'sim'
             },
             {
-                'q': [10,100,1000],
-                'cpush': [1,5,10],
-                'threshold': [100,1000,2000,5000]
+                'q': [10,100],
+                'cpush': [1,3,5],
+                'threshold': [100,1000,2000,5000],
+                'sliding_window_size' : global_config.SLIDING_WINDOW_SIZES
             }
         )
     )
@@ -489,7 +495,7 @@ def _generate_experiment_configs():
     # _generate_mpts_parameter_optimization()
     _generate_mpts()
     # _generate_egreedy()
-    # _generate_sim_cpush_mpts()
+    _generate_sim_cpush_mpts()
     # _generate_sim_cdkegreedy()
     # _generate_cb()
     # _generate_cdkegreedy()
