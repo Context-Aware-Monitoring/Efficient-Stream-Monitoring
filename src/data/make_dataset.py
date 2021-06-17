@@ -270,18 +270,20 @@ def _generate_mpts():
     
     policies.extend(
         get_cross_validated_policies(
-            {'name': 'push-mpts', 'push_likely_arms': 0.0},
+            {'name': 'mpts'},
             {
-                'push_unlikely_arms': [0,1,5],
-                'push_temporal_correlated_arms': [0,1,5],
+                'graph_knowledge' : [{'name' : 'correct', 'weight': weight} for weight in [0.8,1.0]]
+                # 'push_unlikely_arms': [0,1,5],
+                # 'push_temporal_correlated_arms': [0,1,5],
                 # 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
                 # 'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
             }
         )
     )
-    policies.extend([{'name' : 'mpts'}])
 
-    _write_configs_for_policies(policies, name='mpts_baseline')
+
+
+    _write_configs_for_policies(policies, name='gk_mpts_baseline')
 
 
 def _generate_egreedy():
