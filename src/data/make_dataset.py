@@ -270,9 +270,9 @@ def _generate_mpts():
     
     policies.extend(
         get_cross_validated_policies(
-            {'name': 'push-mpts', 'push_likely_arms': 0.0,
-                'push_unlikely_arms': 10},
+            {'name': 'push-mpts', 'push_likely_arms': 0.0},
             {
+                'push_unlikely_arms': [0,1,5],
                 'push_temporal_correlated_arms': [0,1,5],
                 # 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
                 # 'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES
@@ -486,12 +486,12 @@ def _generate_experiment_configs():
     print('Generate experiment configs')
     # _generate_mpts_parameter_optimization()
     _generate_mpts()
-    _generate_egreedy()
-    _generate_sim_cpush_mpts()
-    _generate_sim_cdkegreedy()
+    # _generate_egreedy()
+    # _generate_sim_cpush_mpts()
+    # _generate_sim_cdkegreedy()
     # _generate_cb()
-    _generate_cdkegreedy()
-    _generate_cpush_mpts()
+    # _generate_cdkegreedy()
+    # _generate_cpush_mpts()
     # _generate_awcdkegreedy()
     # _generate_awcpush_mpts()
 
