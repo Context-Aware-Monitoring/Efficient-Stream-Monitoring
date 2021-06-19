@@ -449,8 +449,7 @@ def _generate_cb():
              'context_identifier': 'workload',
              'base_algorithm_name' : 'linear_regression',
              'algorithm_name' : 'bootstrapped_ucb'
-             }
-    }
+    })
 
     _write_configs_for_policies(policies, name='cb', binary_rewards_only=True)
 
