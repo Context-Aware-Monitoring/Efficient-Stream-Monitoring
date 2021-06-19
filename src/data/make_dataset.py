@@ -6,11 +6,141 @@ import itertools
 import os
 import argparse
 import pandas as pd
-import yaml
+import numpy as np
 from time import time
+import yaml
 import global_config
 from . import reward
+from itertools import product
 
+groups = np.repeat(np.arange(10) + 1, 10)
+rnd = np.random.RandomState(10)
+arms = 100
+
+def _generate_synthetic_experiments_for_gk():
+    for c, T, kind in product([0, 0.01,0.05,0.1, 0.2], [10, 100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
+        reward = np.zeros(shape=(T,arms))
+        unique_groups = np.unique(groups)
+        ps = rnd.random(unique_groups.shape[0])
+
+        for p, cg in zip(ps, unique_groups):
+            no_members = (groups == cg).sum()
+            deviation = rnd.uniform(c, -c, no_members)
+            ps_for_group = np.minimum(np.maximum(p + deviation, 0), 1)
+
+            if kind == 'bern':
+                reward[:, groups == cg] = rnd.binomial(1, ps_for_group, (T, no_members))
+            else:
+                if kind == 'norm-sigma-0.1':
+                    sigma_max = 0.1
+                elif kind == 'norm-sigma-0.25':
+                    sigma_max = 0.25
+                sigmas = rnd.uniform(0, sigma_max, no_members)
+                reward[:, groups == cg] = np.maximum(0, rnd.normal(ps_for_group, sigmas, (T, no_members)))
+
+        reward_df_name = '%s/synthetic/synthetic_%s_reward_df_T_%d_arms_%d_c_%.2f_groups_%d.csv' % (
+            global_config.REWARDS_DIR, kind, T, arms, c, unique_groups.shape[0])
+        pd.DataFrame(data = reward).to_csv(reward_df_name)
+        for weight in [0.2,0.5,0.8,1.0]:
+            for L in range(1,101):
+                policies = [
+                        {'name' : 'mpts', 'identifier': 'mpts-%s' % kind},
+                        {
+                            'name': 'mpts',
+                            'graph_knowledge': {
+                                'name' : 'synthetic',
+                                'weight' : weight,
+                                'groups': groups.tolist()
+                            },
+                            'identifier': 'synthetic-%s-mpts-arms-%d-groups-%d-c-%.2f-T-%d-w-%.1f-correct' %(kind, arms, unique_groups.shape[0],c,T,weight)
+                        }
+                    ]
+                error_gk_policies = []
+                for error_kind, perc_affected in product(['remove', 'random'], [0.01,0.05,0.1,0.25,0.5,0.75,1.0]):
+                    error_gk_policies.append(
+                        {
+                            'name': 'mpts',
+                            'graph_knowledge': {
+                                'name' : 'wrong-synthetic',
+                                'weight' : weight,
+                                'groups': groups.tolist(),
+                                'percentage_affected' : perc_affected,
+                                'error_kind' : error_kind
+                            },
+                            'identifier': 'synthetic-%s-mpts-arms-%d-groups-%d-c-%.2f-T-%d-w-%.1f-incorrect-%.2f-%s' %(
+                                kind, arms, unique_groups.shape[0],c,T,weight, perc_affected, error_kind)
+                        }
+                    )
+                policies.extend(error_gk_policies)
+                config = {
+                    'policies': policies,
+                    'reward_path': reward_df_name,
+                    'seed': rnd.randint(10000),
+                    'L': L
+                }
+
+                with open('%s/synthetic_%s_gk_dk_w_%.1f_L_%d_groups_%d_T_%d_c_%.2f.yml' % (global_config.EXPERIMENT_CONFIG_DIR, kind, weight, L, unique_groups.shape[0], T, c), 'w') as outfile:
+                    yaml.dump(config, outfile, default_flow_style=False)
+                    
+
+def _generate_synthetic_experiments_for_push():
+    for c, T, kind in product([0.1, 0.2], [10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
+        reward = np.zeros(shape=(T,arms))
+
+        mus = rnd.uniform(0, 1-c, arms)
+
+        if kind == 'bern':
+            reward = rnd.binomial(1, mus, (T, arms))
+            reward_pushed = rnd.binomial(1, mus + c, (T, arms))
+        else:
+            if kind == 'norm-sigma-0.1':
+                sigmas = rnd.uniform(0, 0.1, arms)
+            elif kind == 'norm-sigma-0.25':
+                sigmas = rnd.uniform(0, 0.25, arms)
+            reward = np.minimum(np.maximum(0, rnd.normal(mus, sigmas, (T, arms))), 1)
+            reward_pushed = np.minimum(np.maximum(0, rnd.normal(mus + c, sigmas, (T, arms))), 1)
+
+        for pushes_perc in [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
+            context = np.zeros(T * arms, dtype=bool)
+            total_num_pushes = int(np.floor(T * arms * pushes_perc))
+
+            context[rnd.choice(T * arms, total_num_pushes, replace=False)] = True
+            context = context.reshape(T, arms)
+            num_pushes_for_arm = context.sum(axis=1)
+            for i in range(arms):
+                reward[context[:,i], i] = reward_pushed[context[:,i], i]
+            reward_path = '%s/synthetic/synthetic_push_c_%.2f_pc_%.2f_kind_%s_arms_%d_T_%d.csv' % (
+                global_config.REWARDS_DIR, c, pushes_perc, kind, arms, T)
+            context_path = '%s/context_synthetic_push_c_%.2f_pc_%.2f_kind_%s_arms_%d_T_%d.csv' % (
+                global_config.CONTEXT_DIR, c, pushes_perc, kind, arms, T)
+
+            pd.DataFrame(data = reward).to_csv(reward_path)
+            pd.DataFrame(data = context).to_csv(context_path)
+
+            for L in range(1,51):
+                policies = [{'name' : 'mpts', 'identifier': 'mpts-gk-%s' % kind}]
+                for cpush in [1,3,5,10]:
+                    for q in [5,10,50,100,500]:
+                        if q > T:
+                            continue
+                        policies.append({
+                                'name': 'cpush-mpts',
+                                'context_path' : context_path,
+                                'kind_knowledge' : 'syn',
+                                'identifier': 'c%d/%d-s-push-%s-mpts-arms-%d-c-%.2f-pc-%.2f-T-%d-' %(
+                                    cpush, q, kind, arms, c, pushes_perc, T),
+                                'cpush': cpush, 'q' : q})
+
+                config = {
+                    'policies': policies,
+                    'reward_path': reward_path,
+                    'seed': rnd.randint(10000),
+                    'L': L
+                }
+
+                with open('%s/synthetic_push_%s_c_%.2f_pc_%.2f_arms_%d_T_%d_L_%d.yml' % (
+                    global_config.EXPERIMENT_CONFIG_DIR, kind, c, pushes_perc, arms, T, L), 'w') as outfile:
+                    yaml.dump(config, outfile, default_flow_style=False)                    
 
 def clean_metrics_data(metrics_dir: str, start: str, end: str, normalize=True):
     """Cleans the metrics csv files by removing the rows that don't lie within
@@ -55,10 +185,10 @@ def _clean_metrics_data_for_csv_file(current_path: str, metrics_dir: str,
         method='linear', axis=0, inplace=True)
 
     if normalize == False:
-        _write_cleaned_df_to_csv(current_path, metrics_dir,
+        _write_cleaned_metrics_df_to_csv(current_path, metrics_dir,
                                  df_without_missing_timestamps)
     else:
-        _write_cleaned_df_to_csv(current_path, metrics_dir,
+        _write_cleaned_metrics_df_to_csv(current_path, metrics_dir,
                                  _normalize_df(df_without_missing_timestamps))
 
 
@@ -70,7 +200,7 @@ def _normalize_df(metrics_df: pd.DataFrame) -> pd.DataFrame:
     return normalized_df
 
 
-def _write_cleaned_df_to_csv(current_path: str, metrics_dir: str,
+def _write_cleaned_metrics_df_to_csv(current_path: str, metrics_dir: str,
                              metrics_df: pd.DataFrame):
     new_filepath = current_path.replace('raw', 'interim')
     new_file_dir = metrics_dir.replace('raw', 'interim')
@@ -139,7 +269,7 @@ def _generate_reward_for_config(seq: bool, window_size: int, window_step: int):
 def get_reward_path(kind: str, seq: bool, window_size: int, window_step: int,
                     **kwargs) -> str:
     """For a given configuration of an experiment this method returns the path
-    where of the respective reward function.
+    of the csv file for the respective reward function.
 
     Args:
       kind (string): One of 'threshold', 'top' or 'continous'. Defines what
@@ -226,8 +356,7 @@ def set_window_size_and_step_in_context_path(
 
     return config
 
-
-def _write_experiment_config(config: dict, name: str):
+def _write_experiment_config_to_disk(config: dict, name: str):
     """Write the config to the data/interim/experimental_configs directory.
 
     Args:
@@ -265,15 +394,13 @@ def _generate_egreedy_parameter_optimization():
     _write_configs_for_policies(policies, name='mpts_parameter_tuning')
 
 def _generate_mpts():
-    # policies = [{'name': 'mpts', 'graph_knowledge': {'name' : 'add', 'n_affected' : 15}}]
     policies = []
     
     policies.extend(
         get_cross_validated_policies(
             {'name': 'mpts'},
             {
-                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES,
-                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES
+                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES
             }
         )
     )
@@ -313,22 +440,19 @@ def _generate_egreedy():
     _write_configs_for_policies(policies, name='egreedy_baseline')
 
 def _generate_cb():
-    policies = []
+    policies = [{'name' : 'mpts'}]
 
-    policies.extend(
-        get_cross_validated_policies(
-            {'name': 'cb-full-model',
+    policies.append(
+            {'name': 'cb-streaming-model',
              'context_path': global_config.DATA_DIR
              + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
-             'context_identifier': 'workload'
-             },
-            {'base_algorithm_name': ['logistic_regression', 'ridge', 'ard_regression',
-                                     'lin_svc', 'ridge_classifier'], 'algorithm_name': ['egreedy', 'bootstrapped_ucb']}
-        )
-    )
+             'context_identifier': 'workload',
+             'base_algorithm_name' : 'linear_regression',
+             'algorithm_name' : 'bootstrapped_ucb'
+             }
+    }
 
     _write_configs_for_policies(policies, name='cb', binary_rewards_only=True)
-
 
 def _generate_awcdkegreedy():
     policies = []
@@ -439,7 +563,7 @@ def _generate_awcpush_mpts():
 
 
 def _generate_cpush_mpts():
-    policies = []
+    policies = [{'name' : 'mpts'}]
 
     policies.extend(
         get_cross_validated_policies(
@@ -448,15 +572,14 @@ def _generate_cpush_mpts():
                 'context_path':
                 global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
                 'push_likely_arms': 0,
-                'push_unlikely_arms': 10,
-                'push_temporal_correlated_arms': 1.0
+                'push_unlikely_arms': 0,
+                'push_temporal_correlated_arms': 0
             },
             {
                 'q': [10,100,1000],
                 'one_active_host_sufficient_for_push': [True, False],
-                'cpush': [1, 5, 10]
-                # 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-                # 'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
+                'cpush': [1, 5, 10],
+                'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
             }
         )
     )
@@ -464,7 +587,7 @@ def _generate_cpush_mpts():
     _write_configs_for_policies(policies, name='cpush_mpts')
 
 def _generate_sim_cpush_mpts():
-    policies = []
+    policies = [{'name' : 'mpts'}]
 
     policies.extend(
         get_cross_validated_policies(
@@ -473,35 +596,33 @@ def _generate_sim_cpush_mpts():
                 'context_path':
                 global_config.DATA_DIR + '/processed/context/%s_context_sim_w%d_s%d.csv',
                 'push_likely_arms': 0,
-                'push_unlikely_arms': 0,
                 'push_temporal_correlated_arms': 0,
-                'kind_knowledge': 'sim'
+                'kind_knowledge': 'sim',
+                'graph_knowledge' : {'name' : 'correct', 'weight' : 1.0}
             },
             {
+                'threshold' : [1000, 100, 10, 50],
                 'q': [10,100],
                 'cpush': [1,3,5],
-                'threshold': [100,1000,2000,5000],
-                'sliding_window_size' : global_config.SLIDING_WINDOW_SIZES
+                'push_unlikely_arms': [0,10]
             }
         )
     )
 
-    _write_configs_for_policies(policies, name='sim_cpush_mpts')    
+    _write_configs_for_policies(policies, name='sim_cpush')    
 
 
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
-    # _generate_mpts_parameter_optimization()
+
     _generate_mpts()
-    # _generate_egreedy()
     _generate_sim_cpush_mpts()
-    # _generate_sim_cdkegreedy()
-    # _generate_cb()
-    # _generate_cdkegreedy()
-    # _generate_cpush_mpts()
-    # _generate_awcdkegreedy()
-    # _generate_awcpush_mpts()
+    _generate_cpush_mpts()
+    _generate_cb()
+    _generate_synthetic_experiments_for_gk()
+    _generate_synthetic_experiments_for_push()
+
 
 
 def _write_config_for_params(
@@ -522,17 +643,17 @@ def _write_config_for_params(
 
     if rk == 'top':
         reward_path = get_reward_path('top', s, wsi, ws, L=L)
-        _write_experiment_config(config_for_this_round | {
+        _write_experiment_config_to_disk(config_for_this_round | {
             'reward_path': reward_path}, '%s_r_top' % name)
     elif rk == 'continous':
         reward_path = get_reward_path('continous', s, wsi, ws)
-        _write_experiment_config(config_for_this_round | {
+        _write_experiment_config_to_disk(config_for_this_round | {
             'reward_path': reward_path}, '%s_r_continous' % name)
     elif rk == 'threshold':
         for th in global_config.THRESHOLDS:
             reward_path = get_reward_path(
                 'threshold', s, wsi, ws, threshold=th)
-            _write_experiment_config(config_for_this_round | {
+            _write_experiment_config_to_disk(config_for_this_round | {
                 'reward_path': reward_path}, '%s_r_threshold_%.1f' % (name, th))
 
 
@@ -548,7 +669,7 @@ def _write_configs_for_policies(policies, name='', binary_rewards_only=False):
             )
     ):
         _write_config_for_params(
-            seed + int(time()),
+            seed,
             params[0],
             params[1],
             params[2],

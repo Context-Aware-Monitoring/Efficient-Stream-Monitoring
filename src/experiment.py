@@ -11,7 +11,7 @@ from datetime import datetime
 import yaml
 import numpy as np
 import pandas as pd
-from models.domain_knowledge import GraphArmKnowledge, RandomGraphKnowledge, WrongGraphArmknowledge
+from models.domain_knowledge import GraphArmKnowledge, RandomGraphKnowledge, WrongGraphArmknowledge, SyntheticGraphArmKnowledge, WrongSyntheticGraphArmKnowledge
 from models.policy import RandomPolicy, EGreedy, MPTS, DKEGreedy, PushMPTS, CPushMpts, CDKEGreedy, CBFullModel, CBStreamingModel, AWCDKEGreedy, AWCPushMpts
 
 DATA_DIR = '%s/data' % dirname(dirname(abspath(__file__)))
@@ -142,12 +142,22 @@ class Experiment:
 
         if name == 'correct':
             return GraphArmKnowledge(self._reward_df.columns.values, **_get_dict_of_policy_params_(config['graph_knowledge']))
-        # elif name == 'random':
-        #     return RandomGraphKnowledge(self._K, **_get_dict_of_policy_params_(config['graph_knowledge']))
         elif name in ['flip', 'remove', 'add', 'unify']:
             config['graph_knowledge']['random_seed'] = self._seed
             self._seed += 1
             return WrongGraphArmknowledge(self._reward_df.columns.values, name, **_get_dict_of_policy_params_(config['graph_knowledge']))
+        elif name in('synthetic', 'wrong-synthetic'):
+            weight = config['graph_knowledge'].get('weight', 1.0)
+            groups = config['graph_knowledge']['groups']
+            if name == 'synthetic':
+                return SyntheticGraphArmKnowledge(self._reward_df.columns.values, groups, weight)
+            else:
+                percentage_affected = config['graph_knowledge']['percentage_affected']
+                error_kind = config['graph_knowledge']['error_kind']
+                random_seed = self._seed
+                self._seed +=1
+                
+                return WrongSyntheticGraphArmKnowledge(self._reward_df.columns.values, groups, error_kind, percentage_affected, weight, random_seed)
 
         return None
 

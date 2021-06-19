@@ -13,7 +13,7 @@ import itertools
 import pandas as pd
 import typing
 from typing import List, Tuple
-from .domain_knowledge import ArmKnowledge, PushArmKnowledge, GraphArmKnowledge, RandomGraphKnowledge, Knowledge, SimiliarPushArmKnowledge
+from .domain_knowledge import ArmKnowledge, PushArmKnowledge, GraphArmKnowledge, RandomGraphKnowledge, Knowledge, SimiliarPushArmKnowledge, SyntheticPushArmKnowledge
 
 np.seterr(invalid='ignore')
 np.seterr(divide='ignore')
@@ -775,9 +775,9 @@ class PushMPTS(MPTS):
                  L: int,
                  reward_df: pd.DataFrame,
                  random_seed: int,
-                 push_likely_arms: float = 1.0,
-                 push_unlikely_arms: float = 1.0,
-                 push_temporal_correlated_arms: float = 1.0,
+                 push_likely_arms: float = 0.0,
+                 push_unlikely_arms: float = 0.0,
+                 push_temporal_correlated_arms: float = 0.0,
                  control_host: str = 'wally113',
                  sliding_window_size: int = None,
                  graph_knowledge: Knowledge = None,
@@ -796,16 +796,23 @@ class PushMPTS(MPTS):
         super().__init__(L, reward_df, random_seed,
                          sliding_window_size=sliding_window_size,
                          graph_knowledge=graph_knowledge, identifier=identifier)
-        self._arm_knowledge = ArmKnowledge(self._arms, control_host)
 
-        self._push_temporal_correlated_arms = push_temporal_correlated_arms
-        self._push_likely_arms = push_likely_arms
-        self._push_unlikely_arms = push_unlikely_arms
+        self._push_temporal_correlated_arms = 0.0
+        self._push_likely_arms = 0.0
+        self._push_unlikely_arms = 0.0
+        
+        if push_likely_arms > 0.0 or push_unlikely_arms > 0.0 or push_temporal_correlated_arms > 0.0:
+        
+            self._arm_knowledge = ArmKnowledge(self._arms, control_host)
 
-        self._alpha = self._compute_init_prior()
-        self._beta = self._compute_init_posterior()
+            self._push_temporal_correlated_arms = push_temporal_correlated_arms
+            self._push_likely_arms = push_likely_arms
+            self._push_unlikely_arms = push_unlikely_arms
 
-        self._alpha[self._arm_knowledge.arm_has_temporal_correlation] = push_temporal_correlated_arms
+            self._alpha = self._compute_init_prior()
+            self._beta = self._compute_init_posterior()
+
+            self._alpha[self._arm_knowledge.arm_has_temporal_correlation] = push_temporal_correlated_arms
 
     def _compute_init_prior(self) -> np.ndarray:
         """Computes the init prior distribution (alpha) for the arms.
@@ -848,7 +855,7 @@ class PushMPTS(MPTS):
         """
         theta = self._rnd.beta(np.maximum(
             1.0, self._alpha + 1), np.maximum(1.0, self._beta + 1))
-        theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
+        # theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
 
         return np.argsort(theta)[-self._L:]
 
@@ -869,9 +876,9 @@ class CPushMpts(PushMPTS):
                  reward_df: pd.DataFrame,
                  random_seed: int,
                  context_df: pd.DataFrame,
-                 push_likely_arms: float = 1.0,
-                 push_unlikely_arms: float = 1.0,
-                 push_temporal_correlated_arms: float = 1.0,
+                 push_likely_arms: float = 0.0,
+                 push_unlikely_arms: float = 0.0,
+                 push_temporal_correlated_arms: float = 0.0,
                  control_host: str = 'wally113',
                  cpush: float = 1.0,
                  q: int = 10,
@@ -890,6 +897,7 @@ class CPushMpts(PushMPTS):
           cpush (float): Push for active arms
           max_number_pushes (int): Number of times an arm gets pushed
         """
+
         super().__init__(L, reward_df, random_seed, push_likely_arms,
                          push_unlikely_arms, push_temporal_correlated_arms,
                          control_host, sliding_window_size=sliding_window_size,
@@ -903,6 +911,8 @@ class CPushMpts(PushMPTS):
                 self._arms, one_active_host_sufficient_for_push, control_host)
         elif kind_knowledge == 'sim':
             self._arm_knowledge = SimiliarPushArmKnowledge(self._arms, kwargs['threshold'], self._context_df.columns.values, control_host)
+        elif kind_knowledge == 'syn':
+            self._arm_knowledge = SyntheticPushArmKnowledge(self._arms)
             
         self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
         self._cpush = cpush
@@ -934,6 +944,8 @@ class CPushMpts(PushMPTS):
         elif isinstance(self._arm_knowledge, PushArmKnowledge):
             active_hosts = self._context_df.columns.values[current_context > 0]
             self._arm_knowledge.update_active_hosts(active_hosts)
+        elif isinstance(self._arm_knowledge, SyntheticPushArmKnowledge):
+            self._arm_knowledge.compute_arms_eligible_for_push(current_context)
 
         arm_gets_pushed = np.logical_and(
             self._arm_knowledge.arms_eligible_for_push,
@@ -981,7 +993,7 @@ class CPushMpts(PushMPTS):
         if self._identifier is not None:
             return self._identifier
 
-        kind_str = 'push' if isinstance(self._arm_knowledge, PushArmKnowledge) else 'sim-%d' % self._arm_knowledge.threshold
+        kind_str = 'push' if isinstance(self._arm_knowledge, PushArmKnowledge) else 'sim-no_exclusion-%d' % self._arm_knowledge.threshold
         host_name = 'one_host' if self._one_active_host_sufficient_for_push else 'two_host'
         return '%s-%s_c%1.f/%d_%s' % (kind_str, host_name, self._cpush, self._max_number_pushes,
                                    super().name)
@@ -1216,7 +1228,7 @@ class CBStreamingModel(CBAbstractBandit):
             base_algorithm_name: str = 'linear_regression',
             algorithm_name: str = 'egreedy',
             batch_size: int = 20,
-            scaler_sample_size: int = 300,
+            scaler_sample_size: int = 1000,
             context_identifier: str = '',
             identifier: typing.Optional[str] = None,
             **kwargs

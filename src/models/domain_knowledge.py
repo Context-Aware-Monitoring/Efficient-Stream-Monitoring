@@ -41,9 +41,49 @@ def extract_metrics_from_arm(arm: str) -> Tuple[str, str]:
     return metrics1, metrics2
 
 
+def get_adjacency_matrix_from_groups(groups, weight):
+    indicies_of_cliques = list()
+    current_clique_number = None
+    for clique_number, idx in zip(sorted(groups), np.argsort(groups)):
+        if clique_number == 0:
+            continue
+        if current_clique_number is None or clique_number != current_clique_number:
+            current_clique_number = clique_number
+            indicies_of_cliques.append(list([idx]))
+        else:
+            indicies_of_cliques[-1].append(idx)
+
+    edges = np.zeros(shape=(len(groups), len(groups)))
+
+    for clique_idx in indicies_of_cliques:
+        adjacency = np.zeros(len(groups))
+        adjacency[clique_idx] = weight
+        edges[clique_idx, :] = adjacency
+
+    np.fill_diagonal(edges, 0.0)
+    assert (edges == edges.T).all()
+
+    return edges
+
+
 class Knowledge:
     pass
 
+
+class GraphKnowledge:
+    weight: float
+    edges: np.ndarray
+
+    @property
+    def weight(self) -> float:
+        return self._weight
+    
+    @property
+    def edges(self) -> np.ndarray:
+        """Returns an adjaceny matrix of size self._K * self._K. Arms i and j
+        are neighbors if self._edges[i,j] is True. The matrix is symmetric.
+        """
+        return self._edges
 
 class ArmKnowledge(Knowledge):
     """Contains information about metrics and hosts for the arms."""
@@ -203,7 +243,6 @@ class DynamicArmKnowledge(ArmKnowledge):
             self.recompute_properties()
             self._active_hosts = set(active_hosts)
 
-
 class PushArmKnowledge(DynamicArmKnowledge):
     """Arms are eligible for a push if either one or both of its hosts are
     active.
@@ -250,11 +289,12 @@ class SimiliarPushArmKnowledge(DynamicArmKnowledge):
         self._arms_eligible_for_anti_push = np.zeros(self._K, dtype=bool)        
 
     def _compute_arms_eligible_for_push(self, similiary):
+        # push = self._matrix[:, similiary < self._threshold].any(axis=1)
+        # anti_push = self._matrix[:, similiary >= self._threshold].any(axis=1)
+        # self._arms_eligible_for_push = np.logical_and(push == True, anti_push == False)
+        # self._arms_eligible_for_anti_push = np.logical_and(push == False, anti_push == True)
         self._arms_eligible_for_push = self._matrix[:, similiary < self._threshold].any(axis=1)
-        self._arms_eligible_for_anti_push = self._matrix[:, similiary >= self._threshold].any(axis=1)
 
-        
-        
     def _compute_push_matrix(self):
         self._matrix = np.zeros(shape=(self._K, self._columns.shape[0]), dtype=bool)
         for i, c in enumerate(self._columns):
@@ -263,20 +303,20 @@ class SimiliarPushArmKnowledge(DynamicArmKnowledge):
             minute = int(re.findall('\d+min', c)[0].split('min')[0])
 
 
-            if minute == 1:
+            if minute == 15:
                 self._matrix[:, i] = np.logical_and(
                     np.isin(self._hosts_for_arm, [h1,h2]).all(axis=1),
-                    np.isin(self._metrics_for_arm, ['mem.used', 'cpu.user', 'load.min1']).all(axis=1)
+                    np.isin(self._metrics_for_arm, ['load.min15']).all(axis=1)
                 )
             elif minute == 5:
                 self._matrix[:, i] = np.logical_and(
                     np.isin(self._hosts_for_arm, [h1,h2]).all(axis=1),
-                    np.isin(self._metrics_for_arm, ['mem.used', 'cpu.user', 'load.min5']).all(axis=1)
+                    np.isin(self._metrics_for_arm, ['load.min15', 'load.min5']).all(axis=1)
                 )
-            elif minute == 15:
+            elif minute == 1:
                 self._matrix[:, i] = np.logical_and(
                     np.isin(self._hosts_for_arm, [h1,h2]).all(axis=1),
-                    np.isin(self._metrics_for_arm, ['mem.used', 'cpu.user', 'load.min15']).all(axis=1)
+                    np.isin(self._metrics_for_arm, ['load.min1', 'load.min5', 'load.min15']).all(axis=1)
                 )                    
 
             
@@ -296,8 +336,31 @@ class SimiliarPushArmKnowledge(DynamicArmKnowledge):
     def arms_eligible_for_anti_push(self) -> np.ndarray:
         """Returns for each arm whether or not it is eligible for a push."""
         return self._arms_eligible_for_anti_push    
+
+class SyntheticPushArmKnowledge:
+
+    arms_eligible_for_push : np.ndarray
+    indicies_of_arms_that_will_not_be_explored : np.ndarray
     
-class GraphArmKnowledge(DynamicArmKnowledge):
+    def __init__(self, arms: np.ndarray):
+        self._arms_eligible_for_push = np.zeros(len(arms), dtype=bool)
+        self._indicies_of_arms_that_will_not_be_explored = np.array([], dtype=int)
+
+    def compute_arms_eligible_for_push(self, context : np.ndarray):
+        self._arms_eligible_for_push = context > 0
+
+    @property
+    def arms_eligible_for_push(self) -> np.ndarray:
+        """Returns for each arm whether or not it is eligible for a push."""
+        return self._arms_eligible_for_push        
+
+    @property
+    def indicies_of_arms_that_will_not_be_explored(self) -> np.ndarray:
+        """Indicies of uninteresting arms, that contain constant metrics.
+        """
+        return self._indicies_of_arms_that_will_not_be_explored
+        
+class GraphArmKnowledge(DynamicArmKnowledge, GraphKnowledge):
     """Contains the neighbors for each arm. Arms are neighbors if they are
     in the same group. Groups are defined based on the type of host (control,
     compute), the metric and the state of the host.
@@ -312,9 +375,6 @@ class GraphArmKnowledge(DynamicArmKnowledge):
     one neighbor:
       - wally113.cpu.user-wally122.mem.used
     """
-
-    edges: np.ndarray
-
     def __init__(self, arms: np.ndarray, weight: float = 0.5, control_host: str = 'wally113'):
         super().__init__(arms, control_host)
         self._weight = weight
@@ -384,46 +444,58 @@ class GraphArmKnowledge(DynamicArmKnowledge):
 
         return group_of_arms
 
-    def get_adjacency_matrix_from_groups(self, groups):
-        indicies_of_cliques = list()
-        current_clique_number = None
-        for clique_number, idx in zip(sorted(groups), np.argsort(groups)):
-            if clique_number == 0:
-                continue
-            if current_clique_number is None or clique_number != current_clique_number:
-                current_clique_number = clique_number
-                indicies_of_cliques.append(list([idx]))
-            else:
-                indicies_of_cliques[-1].append(idx)
-
-        edges = np.zeros(shape=(len(groups), len(groups)))
-
-        for clique_idx in indicies_of_cliques:
-            adjacency = np.zeros(len(groups))
-            adjacency[clique_idx] = self._weight
-            edges[clique_idx, :] = adjacency
-
-        np.fill_diagonal(edges, 0.0)
-        assert (edges == edges.T).all()
-
-        return edges
-
-    @property
-    def weight(self) -> float:
-        return self._weight
-
-    @property
-    def edges(self) -> np.ndarray:
-        """Returns an adjaceny matrix of size self._K * self._K. Arms i and j
-        are neighbors if self._edges[i,j] is True. The matrix is symmetric.
-        """
-        return self._edges
-
     @property
     def name(self):
         return '%.1f-correct-gk' % self._weight
 
+class SyntheticGraphArmKnowledge(GraphKnowledge):
+    edges: np.ndarray
 
+    def __init__(self, arms: np.ndarray, groups: List[int], weight: float =0.5):
+        self._K = len(arms)
+        self._arms = arms
+        self._weight = weight
+        self._groups = np.array(groups)
+        self._edges = get_adjacency_matrix_from_groups(groups, self._weight)
+
+    @property
+    def name(self):
+        return '%.1f-correct-synthetic' % (self._weight)
+
+class WrongSyntheticGraphArmKnowledge(SyntheticGraphArmKnowledge):
+    def __init__(self, arms: np.ndarray, groups: np.ndarray, error_kind: str, percentage_affected: float, weight: float=0.5, seed=0):
+        super().__init__(arms, groups, weight)
+        self._rnd = np.random.RandomState(seed)
+        self._unique_groups = np.unique(groups[groups != 0])        
+        self._no_groups = self._unique_groups.shape[0]
+        self._percentage_affected = percentage_affected
+        self._error_kind = error_kind
+        
+        if error_kind == 'remove':
+            self._remove_edges()
+        elif error_kind == 'random':
+            self._random_group()
+    
+    def _remove_edges(self):
+        candidates = np.arange(self._K)[self._groups > 0]
+        number_of_removals = int(len(candidates) * self._percentage_affected)
+        remove_group_indicies = self._rnd.choice(
+            candidates, number_of_removals, replace=False)
+
+        self._groups[remove_group_indicies] = 0.0
+
+        self._edges = get_adjacency_matrix_from_groups(self._groups, self._weight)
+
+    def _random_group(self):
+        no_affected = int(self._K * self._percentage_affected)
+        indicies_of_affected = self._rnd.choice(self._K, no_affected, replace=False)
+        self._groups[indicies_of_affected] = self._rnd.choice(self._unique_groups, no_affected)
+        self._edges = get_adjacency_matrix_from_groups(self._groups, self._weight)
+
+    @property
+    def name(self):
+        return '%.2f-%s-wrong-synthetic-dk' % (self._percentage_affected, self._error_kind)
+        
 class WrongGraphArmknowledge(GraphArmKnowledge):
 
     def __init__(self, arms: np.ndarray, kind: str, n_affected: int, weight: float = 1.0, control_host: str = 'wally113', random_seed=0):
@@ -450,7 +522,7 @@ class WrongGraphArmknowledge(GraphArmKnowledge):
 
         groups[remove_group_indicies] = 0.0
 
-        self._edges = self.get_adjacency_matrix_from_groups(groups)
+        self._edges = get_adjacency_matrix_from_groups(groups, self._weight)
 
     def _add_edges(self, n_affected_arms):
         groups = self.get_group_of_arms()
@@ -462,7 +534,7 @@ class WrongGraphArmknowledge(GraphArmKnowledge):
         groups[add_group_indicies] = self._rnd.choice(
             np.arange(groups.max()) + 1, n_affected_arms)
 
-        self._edges = self.get_adjacency_matrix_from_groups(groups)
+        self._edges = get_adjacency_matrix_from_groups(groups, self._weight)
 
     def _unify_cliques(self, n_affected_cliques):
         group = self.get_group_of_arms()
@@ -476,7 +548,7 @@ class WrongGraphArmknowledge(GraphArmKnowledge):
             min_clique_number = ug.min()
             group[(group == ug[0]) | (group == ug[1])] = min_clique_number
 
-        self._edges = self.get_adjacency_matrix_from_groups(group)
+        self._edges = get_adjacency_matrix_from_groups(group, self._weight)
 
     def _flip_edges(self, n_affected):
         self._edges = self._edges.flatten()
