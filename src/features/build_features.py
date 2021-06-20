@@ -37,7 +37,7 @@ for i in range(len(global_config.HOSTS)):
         h1 = global_config.HOSTS[i]
         h2 = global_config.HOSTS[j]        
         for minute in [1,5,15]:
-            cs.append('%s-%s.%dmin.sim' % (hosts[i], hosts[j], minute))
+            cs.append('%s-%s.%dmin.sim' % (global_config.HOSTS[i], global_config.HOSTS[j], minute))
 sim_df = pd.DataFrame(index=min_15.index.values, columns=cs)
 
 for i in range(len(global_config.HOSTS)):
@@ -50,7 +50,7 @@ for i in range(len(global_config.HOSTS)):
         for minute,tdf in zip([1,5,15],[min_1, min_5, min_15]):
             target_col = '%s-%s.%dmin.sim' % (h1, h2, minute)
             sim_df[target_col] = np.abs(tdf[h1].values - tdf[h2].values)
-sim_df.to_csv('/seq_context_sim_w60_s1.csv')
+sim_df.to_csv('%s/seq_context_sim_w60_s1.csv' % global_config.CONTEXT_DIR)
 
 for seq, window_size, window_step in itertools.product(
         global_config.SEQ,
