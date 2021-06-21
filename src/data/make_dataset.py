@@ -596,10 +596,10 @@ def _generate_sim_cpush_mpts():
                 global_config.DATA_DIR + '/processed/context/%s_context_sim_w%d_s%d.csv',
                 'push_likely_arms': 0,
                 'push_temporal_correlated_arms': 0,
-                'kind_knowledge': 'sim',
-                'graph_knowledge' : {'name' : 'correct', 'weight' : 1.0}
+                'kind_knowledge': 'sim'
             },
             {
+                'graph_knowledge' : [{'name' : 'correct', 'weight' : 1.0}, None],                
                 'threshold' : [1000, 100, 10, 50],
                 'q': [10,100],
                 'cpush': [1,3,5],
@@ -615,12 +615,12 @@ def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
 
-    _generate_mpts()
+    # _generate_mpts()
     _generate_sim_cpush_mpts()
-    _generate_cpush_mpts()
-    _generate_cb()
-    _generate_synthetic_experiments_for_gk()
-    _generate_synthetic_experiments_for_push()
+    # _generate_cpush_mpts()
+    # _generate_cb()
+    # _generate_synthetic_experiments_for_gk()
+    # _generate_synthetic_experiments_for_push()
 
 
 
