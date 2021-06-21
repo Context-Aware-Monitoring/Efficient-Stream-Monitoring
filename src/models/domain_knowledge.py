@@ -276,7 +276,6 @@ class PushArmKnowledge(DynamicArmKnowledge):
 
 class SimiliarPushArmKnowledge(DynamicArmKnowledge):
     arms_eligible_for_push: np.ndarray
-    arms_eligible_for_anti_push: np.ndarray
     threshold : int
     
     def __init__(self, arms, threshold, columns, control_host='wally113'):
@@ -286,13 +285,8 @@ class SimiliarPushArmKnowledge(DynamicArmKnowledge):
         self._compute_push_matrix()
         
         self._arms_eligible_for_push = np.zeros(self._K, dtype=bool)
-        self._arms_eligible_for_anti_push = np.zeros(self._K, dtype=bool)        
 
     def _compute_arms_eligible_for_push(self, similiary):
-        # push = self._matrix[:, similiary < self._threshold].any(axis=1)
-        # anti_push = self._matrix[:, similiary >= self._threshold].any(axis=1)
-        # self._arms_eligible_for_push = np.logical_and(push == True, anti_push == False)
-        # self._arms_eligible_for_anti_push = np.logical_and(push == False, anti_push == True)
         self._arms_eligible_for_push = self._matrix[:, similiary < self._threshold].any(axis=1)
 
     def _compute_push_matrix(self):
@@ -331,11 +325,6 @@ class SimiliarPushArmKnowledge(DynamicArmKnowledge):
     def arms_eligible_for_push(self) -> np.ndarray:
         """Returns for each arm whether or not it is eligible for a push."""
         return self._arms_eligible_for_push
-
-    @property
-    def arms_eligible_for_anti_push(self) -> np.ndarray:
-        """Returns for each arm whether or not it is eligible for a push."""
-        return self._arms_eligible_for_anti_push    
 
 class SyntheticPushArmKnowledge:
 

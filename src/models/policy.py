@@ -952,19 +952,9 @@ class CPushMpts(PushMPTS):
             self._no_pushed < self._max_number_pushes
         )
 
-        # arm_gets_anti_pushed = np.logical_and(
-        #     self._arm_knowledge.arms_eligible_for_anti_push,
-        #     self._no_pushed < self._max_number_pushes
-        # )
-
         alpha_pushed = self._alpha + arm_gets_pushed * self._cpush
-        # beta_pushed = self._beta + (arm_gets_anti_pushed * self._cpush)
-        
-        # theta = self._rnd.beta(np.maximum(
-        #     1.0, alpha_pushed + 1), np.maximum(1.0, beta_pushed + 1))
         theta = self._rnd.beta(np.maximum(
             1.0, alpha_pushed + 1), np.maximum(1.0, self._beta + 1))
-        theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
 
         picked_arms_indicies = np.argsort(theta)[-self._L:]
 
@@ -994,7 +984,7 @@ class CPushMpts(PushMPTS):
         if self._identifier is not None:
             return self._identifier
 
-        kind_str = 'push' if isinstance(self._arm_knowledge, PushArmKnowledge) else 'sim-no_exclusion-%d' % self._arm_knowledge.threshold
+        kind_str = 'push' if isinstance(self._arm_knowledge, PushArmKnowledge) else 'sim-%d' % self._arm_knowledge.threshold
         host_name = 'one_host' if self._one_active_host_sufficient_for_push else 'two_host'
         return '%s-%s_c%1.f/%d_%s' % (kind_str, host_name, self._cpush, self._max_number_pushes,
                                    super().name)

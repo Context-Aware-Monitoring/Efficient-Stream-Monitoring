@@ -16,6 +16,7 @@ from itertools import product
 groups = np.repeat(np.arange(10) + 1, 10)
 rnd = np.random.RandomState(10)
 arms = 100
+seed = 0
 
 def _generate_synthetic_experiments_for_gk():
     for c, T, kind in product([0, 0.01,0.05,0.1, 0.2], [10, 100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
@@ -562,7 +563,7 @@ def _generate_awcpush_mpts():
 
 
 def _generate_cpush_mpts():
-    policies = [{'name' : 'mpts'}]
+    policies = []
 
     policies.extend(
         get_cross_validated_policies(
@@ -586,7 +587,7 @@ def _generate_cpush_mpts():
     _write_configs_for_policies(policies, name='cpush_mpts')
 
 def _generate_sim_cpush_mpts():
-    policies = [{'name' : 'mpts'}]
+    policies = []
 
     policies.extend(
         get_cross_validated_policies(
@@ -615,9 +616,9 @@ def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
 
-    # _generate_mpts()
+    _generate_mpts()
     _generate_sim_cpush_mpts()
-    # _generate_cpush_mpts()
+    _generate_cpush_mpts()
     # _generate_cb()
     # _generate_synthetic_experiments_for_gk()
     # _generate_synthetic_experiments_for_push()
@@ -657,15 +658,14 @@ def _write_config_for_params(
 
 
 def _write_configs_for_policies(policies, name='', binary_rewards_only=False):
+    global seed
     rewards = global_config.BINARY_REWARD_KINDS if binary_rewards_only else global_config.REWARD_KINDS
-    for seed, params in enumerate(
-            itertools.product(
+    for params in itertools.product(
                 global_config.Ls,
                 global_config.WINDOW_SIZES,
                 global_config.WINDOW_STEPS,
                 global_config.SEQ,
                 rewards
-            )
     ):
         _write_config_for_params(
             seed,
@@ -677,7 +677,7 @@ def _write_configs_for_policies(policies, name='', binary_rewards_only=False):
             policies,
             name
         )
-
+        seed += 1
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
