@@ -977,11 +977,12 @@ class CPushMpts(PushMPTS):
         return picked_arms_indicies
 
     def _dynamically_update_neighborhood(self):
-        current_context = self._context_df.values[self._iteration, :]
-        active_hosts = self._context_df.columns.values[current_context > 0]
+        if self._kind_knowledge == 'push':
+            current_context = self._context_df.values[self._iteration, :]
+            active_hosts = self._context_df.columns.values[current_context > 0]
 
-        self._graph_knowledge.update_active_hosts(active_hosts)
-        self._edges = self._graph_knowledge.edges
+            self._graph_knowledge.update_active_hosts(active_hosts)
+            self._edges = self._graph_knowledge.edges
 
     @property
     def name(self):
