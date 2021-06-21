@@ -395,7 +395,7 @@ def _generate_egreedy_parameter_optimization():
     _write_configs_for_policies(policies, name='mpts_parameter_tuning')
 
 def _generate_mpts():
-    policies = []
+    policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
     
     policies.extend(
         get_cross_validated_policies(
@@ -538,7 +538,7 @@ def _generate_sim_cdkegreedy():
 
 
 def _generate_awcpush_mpts():
-    policies = []
+    policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
 
     policies.extend(
         get_cross_validated_policies(
@@ -588,7 +588,7 @@ def _generate_cpush_mpts():
     _write_configs_for_policies(policies, name='cpush_mpts')
 
 def _generate_sim_cpush_mpts():
-    policies = []
+    policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
 
     policies.extend(
         get_cross_validated_policies(
