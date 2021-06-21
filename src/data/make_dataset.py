@@ -401,7 +401,8 @@ def _generate_mpts():
         get_cross_validated_policies(
             {'name': 'mpts'},
             {
-                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES
+                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES,
+                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES
             }
         )
     )
