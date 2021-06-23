@@ -39,6 +39,7 @@ class AbstractBandit(ABC):
                  L: int,
                  reward_df: pd.DataFrame,
                  sliding_window_size: int = None,
+                 sliding_window_type: str = None,
                  graph_knowledge: Knowledge = None,
                  identifier: typing.Optional[str] = None
                  ):
@@ -56,6 +57,7 @@ class AbstractBandit(ABC):
 
         self._sliding_window_size = sliding_window_size
         if sliding_window_size is not None:
+            self._sliding_window_type = sliding_window_type
             self._sliding_window_index = 0
 
         self._identifier = identifier
@@ -172,16 +174,6 @@ class AbstractBandit(ABC):
         """Updates the data structures of the sliding window"""
         pass
 
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Returns the name of the bandit
-
-        Returns:
-          string
-        """
-        return
-
 
 class RandomPolicy(AbstractBandit):
     """Policy that picks arms randomly."""
@@ -195,469 +187,8 @@ class RandomPolicy(AbstractBandit):
         super().__init__(L, reward_df, identifier=identifier)
         self._rnd = np.random.RandomState(random_seed)
 
-    @property
-    def name(self):
-        if self._identifier is not None:
-            return self._identifier
-
-        return 'random'
-
     def _pick_arms(self):
         return self._rnd.choice(self._K, self._L, replace=False)
-
-
-class EGreedy(AbstractBandit):
-    """E-Greedy bandit algorithm that picks the arms with highest expected
-    reward greedily with probability 1-e (exploitation) and random arms with
-    probablity e (exploration).
-    """
-
-    epsilon: float
-
-    def __init__(
-            self, L: int,
-            reward_df: pd.DataFrame,
-            random_seed: int,
-            epsilon: float = 0.1,
-            sliding_window_size: int = None,
-            graph_knowledge: Knowledge = None,
-            identifier: typing.Optional[str] = None
-    ):
-        super().__init__(
-            L,
-            reward_df,
-            sliding_window_size=sliding_window_size,
-            graph_knowledge=graph_knowledge,
-            identifier=identifier
-        )
-        assert epsilon >= 0.0
-
-        self._epsilon = epsilon
-        self._init_expected_values = np.repeat(1.0, self._K)
-        self._expected_values = np.copy(self._init_expected_values)
-        self._sum_reward = np.zeros(self._K)
-        self._num_plays = np.zeros(self._K)
-        self._arm_last_explored = np.repeat(-1, self._K)
-
-        self._rnd = np.random.RandomState(random_seed)
-
-        EGreedy._init_sliding_window(self)
-
-        if self._graph_knowledge is not None:
-            self._sum_pushes_by_neighbours = np.zeros(self._K)
-            self._num_pushes_by_neighbours = np.zeros(self._K)
-
-    @property
-    def epsilon(self) -> float:
-        """Probability of exploration"""
-        return self._epsilon
-
-    @property
-    def name(self) -> str:
-        if self._identifier is not None:
-            return self._identifier
-
-        return '%.1f-greedy-%s-sw%s' % (
-            self._epsilon,
-            str(self._sliding_window_size) if self._sliding_window_size is not None else 'no',
-            '' if self._graph_knowledge is None else '-%s' % self._graph_knowledge.name
-        )
-
-    def _init_sliding_window(self):
-        if self._sliding_window_size is None:
-            return
-
-        self._sliding_played_arms = np.zeros(
-            (self._sliding_window_size, self._K), dtype=bool)
-        self._sliding_reward = np.zeros((self._sliding_window_size, self._K))
-
-        if self._graph_knowledge is not None:
-            self._sliding_push = np.zeros((self._sliding_window_size, self._K))
-            self._sliding_num_pushes = np.zeros(
-                (self._sliding_window_size, self._K))
-            self._push_received_this_iteration = np.zeros(self._K)
-            self._num_push_received_this_iteration = np.zeros(self._K)
-
-    def _update_sliding_window(self):
-        arm_played_window_size_iterations_ago = self._sliding_played_arms[
-            self._sliding_window_index, :]
-        self._num_plays -= arm_played_window_size_iterations_ago
-        self._sum_reward[arm_played_window_size_iterations_ago] -= self._sliding_reward[self._sliding_window_index,
-                                                                                        arm_played_window_size_iterations_ago]
-
-        if self._graph_knowledge is not None:
-            self._num_pushes_by_neighbours -= self._sliding_num_pushes[self._sliding_window_index, :]
-            self._sum_pushes_by_neighbours -= self._sliding_push[self._sliding_window_index, :]
-
-        self._sliding_played_arms[self._sliding_window_index,
-                                  arm_played_window_size_iterations_ago] = False
-        self._sliding_reward[self._sliding_window_index,
-                             arm_played_window_size_iterations_ago] = 0.0
-
-        self._sliding_played_arms[self._sliding_window_index,
-                                  self._picked_arms_indicies] = True
-        self._sliding_reward[self._sliding_window_index,
-                             self._picked_arms_indicies] = self._reward_df.values[self._iteration, self._picked_arms_indicies]
-
-        if self._graph_knowledge is not None:
-            self._sliding_num_pushes[self._sliding_window_index] = self._num_push_received_this_iteration
-            self._sliding_push[self._sliding_window_index] = self._push_received_this_iteration
-
-        self._recompute_expected_values()
-
-    def _pick_arms(self):
-        """Picks arms. Performs an exploration step with probability epsilon
-        and an exploitation step with probability 1-epsilon.
-        """
-        if self._epsilon > self._rnd.rand():
-            return self.explore_arms()
-        else:
-            return np.argsort(self._expected_values)[-self._L:]
-
-    def explore_arms(self):
-        return self._rnd.choice(self._K, self._L, replace=False)
-
-    def _learn(self):
-        """Learns from the reward for the picked arms. Updates the empirical
-        expected value for the arms.
-        """
-        self._num_plays[self._picked_arms_indicies] += 1
-        self._sum_reward[self._picked_arms_indicies] += self._reward_df.values[self._iteration,
-                                                                               self._picked_arms_indicies]
-        self._arm_last_explored[self._picked_arms_indicies] = self._iteration
-
-        if self._graph_knowledge is None:  # otherwise we will recompute it later anyway
-            self._recompute_expected_values()
-
-    def _recompute_expected_values(self):
-        not_yet_explored = self._arm_last_explored == -1
-
-        if self._sliding_window_size is not None:
-            not_yet_explored = np.logical_or(
-                not_yet_explored, self._arm_last_explored <= self._iteration - self._sliding_window_size)
-
-        if self._graph_knowledge is None:
-            self._expected_values = self._sum_reward / self._num_plays
-            self._expected_values[not_yet_explored] = self._init_expected_values[not_yet_explored]
-        else:
-            self._expected_values = (np.where(not_yet_explored, self._init_expected_values, self._sum_reward) + self._sum_pushes_by_neighbours)\
-                / (np.where(not_yet_explored, 1, self._num_plays) + self._num_pushes_by_neighbours)
-
-    def _update_parameters_for_neighbored_arms(self, update, arm_gets_update, number_updates):
-        self._sum_pushes_by_neighbours[arm_gets_update] += update
-        self._num_pushes_by_neighbours[arm_gets_update] += number_updates
-
-        if self._sliding_window_size is not None:
-            self._push_received_this_iteration = np.zeros(self._K)
-            self._num_push_received_this_iteration = np.zeros(self._K)
-            self._push_received_this_iteration[arm_gets_update] = update
-            self._num_push_received_this_iteration[arm_gets_update] = number_updates
-
-        self._recompute_expected_values()
-
-    def reset_policy(self):
-        self._expected_values = np.copy(self._init_expected_values)
-        self._sum_reward = np.zeros(self._K)
-        self._num_plays = np.zeros(self._K)
-
-
-class DKEGreedy(EGreedy):
-    """E-Greedy bandit algorithm using domain knowledge to set the initial
-    expected reward and exclude arms from exploration. Initial reward of arms
-    that lay on the same host or between the control host and a compute host
-    will receive a higher initial expected value than the other arms.
-    """
-
-    def __init__(
-            self,
-            L: int,
-            reward_df: pd.DataFrame,
-            random_seed: int,
-            epsilon: float = 0.1,
-            init_ev_likely_arms: float = 0.95,
-            init_ev_unlikely_arms: float = 0.75,
-            init_ev_temporal_correlated_arms: float = 1.0,
-            control_host: str = 'wally113',
-            sliding_window_size: int = None,
-            graph_knowledge: Knowledge = None,
-            identifier: typing.Optional[str] = None
-    ):
-        """Constructs the Domain Knowledge Epsilon-Greedy Algorithm.
-
-        Args:
-          control_host (string): Name of the control host
-          init_ev_likely_arms (float): During initialization of the expected
-          values, arms on the same host and arms between control host and
-          compute hosts receive this value as initial expected value.
-          init_ev_unlikely_arms (float): The other arms will receive this value
-          as intial expected value.
-        """
-        super().__init__(
-            L,
-            reward_df,
-            random_seed,
-            epsilon,
-            sliding_window_size=sliding_window_size,
-            graph_knowledge=graph_knowledge,
-            identifier=identifier
-        )
-
-        self._arm_knowledge = ArmKnowledge(self._arms, control_host)
-        self._init_ev_temporal_correlated_arms = init_ev_temporal_correlated_arms
-        self._init_ev_likely_arms = init_ev_likely_arms
-        self._init_ev_unlikely_arms = init_ev_unlikely_arms
-        self._init_expected_values = self._get_init_ev()
-        self._expected_values = np.copy(self._init_expected_values)
-
-    def _get_init_ev(self):
-        """Intializes the expected value for the arms. An arm is a pair of
-        metrics. If the metrics are on the same host or are a pair between a
-        computing and the control host the expected value is set to
-        self._init_ev_likely_arms, otherwise to self._init_ev_unlikely_arms.
-        The ev of arms that will not be explored is set to 0.
-        """
-        expected_values = np.where(
-            np.logical_or(
-                self._arm_knowledge.arm_lays_on_same_host,
-                self._arm_knowledge.arm_lays_on_control_host
-            ),
-            self._init_ev_likely_arms,
-            self._init_ev_unlikely_arms
-        )
-
-        expected_values[self._arm_knowledge.arm_has_temporal_correlation] = self._init_ev_temporal_correlated_arms
-
-        return expected_values
-
-    def explore_arms(self):
-        """Performs an exploration step but never exploration arms that we know
-        are uninteresting (arms for the metric load.cpucore because this has a
-        static value).
-        """
-        explore_arm_indicies = self._rnd.choice(
-            self._arm_knowledge.indicies_of_arms_that_will_be_explored,
-            self._L,
-            replace=False
-        )
-        return explore_arm_indicies
-
-    @property
-    def name(self) -> str:
-        if self._identifier is not None:
-            return self._identifier
-
-        return '%.1f,%.1f/%.1f-dk-%s' % (
-            self._init_ev_temporal_correlated_arms,
-            self._init_ev_likely_arms,
-            self._init_ev_unlikely_arms,
-            super().name
-        )
-
-
-class CDKEGreedy(DKEGreedy):
-    """E-Greedy bandit algorithm using domain knowledge to initially push more
-    likely arms and using dynamic pushes based on the context to further
-    improve picking of arms. The context contains the number of events per
-    host.
-    """
-
-    def __init__(
-            self,
-            L: int,
-            reward_df: pd.DataFrame,
-            random_seed: int,
-            context_df: pd.DataFrame,
-            epsilon: float = 0.1,
-            init_ev_likely_arms: float = 0.95,
-            init_ev_unlikely_arms: float = 0.75,
-            init_ev_temporal_correlated_arms: float = 1.0,
-            control_host: str = 'wally113',
-            push: float = 1.0,
-            max_number_pushes: int = 10,
-            push_kind: str = 'plus',
-            one_active_host_sufficient_for_push: bool = True,
-            sliding_window_size: int = None,
-            graph_knowledge: Knowledge = None,
-            kind_knowledge = 'push',
-            identifier: typing.Optional[str] = None,
-            **kwargs
-    ):
-        """
-        Args:
-          context_df (DataFrame): DataFrame containing the number of events per
-          host (columns) and iterations (rows).
-          push (float): Push that gets performed for active arms.
-          max_number_pushes (int): Number of times an arm will be pushed.
-          push_kind (string): One of 'plus' or 'multiply'
-        """
-        super().__init__(
-            L,
-            reward_df,
-            random_seed,
-            epsilon,
-            init_ev_likely_arms,
-            init_ev_unlikely_arms,
-            init_ev_temporal_correlated_arms,
-            control_host,
-            sliding_window_size=sliding_window_size,
-            graph_knowledge=graph_knowledge,
-            identifier=identifier
-        )
-        
-        self._context_df = context_df
-        self._kind_knowledge = kind_knowledge
-        if kind_knowledge == 'push':
-            self._arm_knowledge = PushArmKnowledge(
-                self._arms, one_active_host_sufficient_for_push, control_host)
-        elif kind_knowledge == 'sim':
-            self._arm_knowledge = SimiliarPushArmKnowledge(self._arms, kwargs['threshold'], self._context_df.columns.values, control_host)
-        self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
-        self._no_pushed = np.zeros(self._K)
-        self._push = push
-        self._max_number_pushes = max_number_pushes
-        self._push_kind = push_kind
-        CDKEGreedy._init_sliding_window(self)
-
-    def _init_sliding_window(self):
-        if self._sliding_window_size is not None:
-            self._sliding_push_received = np.zeros(
-                shape=(self._sliding_window_size, self._K), dtype=bool)
-            self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
-
-    def _update_sliding_window(self):
-        super()._update_sliding_window()
-        self._no_pushed -= self._sliding_push_received[self._sliding_window_index, :]
-
-        self._sliding_push_received[self._sliding_window_index, :] = False
-        self._sliding_push_received[self._sliding_window_index] = self._push_received_this_iteration
-
-    def pick_arms(self):
-        """Pushes the arms with the context. Uses the underlying DKEgreedy
-        algorithm to pick the arms.
-        """
-        if self._epsilon > self._rnd.rand():
-            return self.explore_arms()
-        else:
-            return self._push_and_pick_arms()
-
-    def _push_and_pick_arms(self):
-        current_context = self._context_df.values[self._iteration, :]
-
-        if isinstance(self._arm_knowledge, SimiliarPushArmKnowledge):
-            self._arm_knowledge._compute_arms_eligible_for_push(current_context)
-        elif isinstance(self._arm_knowledge, PushArmKnowledge):
-            active_hosts = self._context_df.columns.values[current_context > 0]
-            self._arm_knowledge.update_active_hosts(active_hosts)
-
-        arm_gets_pushed = np.logical_and(
-            self._arm_knowledge.arms_eligible_for_push,
-            self._no_pushed < self._max_number_pushes
-        )
-
-        # arm_gets_anti_pushed = np.logical_and(
-        #     self._arm_knowledge.arms_eligible_for_anti_push,
-        #     self._no_pushed < self._max_number_pushes
-        # )
-
-        if self._push_kind == 'plus':
-            pushed_expected_values[arm_gets_pushed] = self._expected_values[arm_gets_pushed] + \
-                (self._push * arm_gets_pushed[arm_gets_pushed])
-            # pushed_expected_values[arm_gets_anti_pushed] = self._expected_values[arm_gets_anti_pushed] - \
-            #     (self._push * arm_gets_anti_pushed[arm_gets_anti_pushed])            
-        else:
-            factors = np.where(arm_gets_pushed, self._push, 1.0)
-            pushed_expected_values *= factors
-
-        picked_arms_indicies = np.argsort(pushed_expected_values)[-self._L:]
-
-        if self._sliding_window_size is not None:
-            self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
-            self._push_received_this_iteration[picked_arms_indicies] = self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
-
-        self._no_pushed[picked_arms_indicies] += self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
-
-        return picked_arm_indicies
-
-    def _dynamically_update_neighborhood(self):
-        current_context = self._context_df.values[self._iteration, :]
-        active_hosts = self._context_df.columns.values[current_context > 0]
-
-        self._graph_knowledge.update_active_hosts(active_hosts)
-        self._edges = self._graph_knowledge.edges
-
-    @property
-    def name(self):
-        if self._identifier is not None:
-            return self._identifier
-
-        kind_str = 'push' if isinstance(self._arm_knowledge, PushArmKnowledge) else 'sim-%d' % self._arm_knowledge.threshold
-        host_name = 'one_host' if self._one_active_host_sufficient_for_push else 'two_host'
-        return '%s-%s_%s-c%.1f/%d_%s' % (
-            kind_str, host_name, self._push_kind, self._push, self._max_number_pushes, super().name)
-
-    def reset_policy(self):
-        super().reset_policy()
-        self._no_pushed = np.zeros(self._K)
-
-
-class AWCDKEGreedy(CDKEGreedy):
-
-    def __init__(
-            self,
-            L: int,
-            reward_df: pd.DataFrame,
-            random_seed: int,
-            context_df: pd.DataFrame,
-            epsilon: float = 0.1,
-            init_ev_likely_arms: float = 0.95,
-            init_ev_unlikely_arms: float = 0.75,
-            init_ev_temporal_correlated_arms: float = 1.0,
-            control_host: str = 'wally113',
-            push: float = 1.0,
-            max_number_pushes: int = 10,
-            push_kind: str = 'plus',
-            one_active_host_sufficient_for_push: bool = True,
-            mean_diviation=200,
-            sliding_window_size: int = None,
-            graph_knowledge: Knowledge = None,
-            identifier: typing.Optional[str] = None
-    ):
-        assert sliding_window_size is None
-
-        super().__init__(L, reward_df, random_seed, context_df, epsilon, init_ev_likely_arms,
-                         init_ev_unlikely_arms, init_ev_temporal_correlated_arms, control_host, push, max_number_pushes, push_kind, one_active_host_sufficient_for_push, sliding_window_size, graph_knowledge, identifier)
-        self._mean_diviation = mean_diviation
-        self._context_mean = None
-        self._size_aw = 0
-
-    def reset_policy(self):
-        super().reset_policy()
-        self._context_mean = None
-        self._size_aw = 0
-
-    def pick_arms(self):
-        current_context = self._context_df.values[self._iteration, :]
-        if self._context_mean is None:
-            self._context_mean = np.copy(current_context)
-        else:
-            diff = np.lingalg.norm(self._context_mean - current_context)
-            if diff > self._mean_diviation:
-                self.reset_policy()
-                self._context_mean = np.copy(current_context)
-            else:
-                self._context_mean = (
-                    (self._context_mean) * self._size_aw + current_context) / (self._size_aw + 1)
-
-        self._size_aw += 1
-        super().pick_arms()
-
-    @property
-    def name(self):
-        if self._identifier is not None:
-            return self._identifier
-
-        return '%d-mean-divition-%s' % (self._mean_diviation, super().name)
-
 
 class MPTS(AbstractBandit):
     """Multi-Play Thompson-Sampling bandit algorithm. This baysian bandit
@@ -670,6 +201,7 @@ class MPTS(AbstractBandit):
                  reward_df: pd.DataFrame,
                  random_seed: int,
                  sliding_window_size: int = None,
+                 sliding_window_type: str = None,
                  graph_knowledge: Knowledge = None,
                  identifier: typing.Optional[str] = None
                  ):
@@ -682,6 +214,7 @@ class MPTS(AbstractBandit):
             L,
             reward_df,
             sliding_window_size=sliding_window_size,
+            sliding_window_type=sliding_window_type,
             graph_knowledge=graph_knowledge,
             identifier=identifier
         )
@@ -692,20 +225,15 @@ class MPTS(AbstractBandit):
 
         MPTS._init_sliding_window(self)
 
-    @property
-    def name(self):
-        if self._identifier is not None:
-            return self._identifier
-
-        return 'mpts-%s-sw%s' % (
-            str(self._sliding_window_size) if self._sliding_window_size is not None else 'no',
-            '' if self._graph_knowledge is None else '-%s' % self._graph_knowledge.name
-        )
-
     def _init_sliding_window(self):
         if self._sliding_window_size is None:
             return
 
+        if self._sliding_window_type == 'all' or self._sliding_window_type is None:
+            self._sliding_window_relevant = np.ones(self._K, dtype=bool)
+        else:
+            self._sliding_window_relevant = ArmKnowledge(self._arms).arm_relevant_for_sliding_window
+        
         self._sliding_alpha = np.zeros((self._sliding_window_size, self._K))
         self._sliding_beta = np.zeros((self._sliding_window_size, self._K))
 
@@ -743,8 +271,8 @@ class MPTS(AbstractBandit):
         reward_this_round = self._reward_df.values[self._iteration,
                                                    self._picked_arms_indicies]
 
-        self._alpha -= self._sliding_alpha[self._sliding_window_index, :]
-        self._beta -= self._sliding_beta[self._sliding_window_index, :]
+        self._alpha -= np.where(self._sliding_window_relevant, self._sliding_alpha[self._sliding_window_index, :], 0)
+        self._beta -= np.where(self._sliding_window_relevant, self._sliding_beta[self._sliding_window_index, :], 0)
 
         self._sliding_alpha[self._sliding_window_index, :] = np.zeros(self._K)
         self._sliding_beta[self._sliding_window_index, :] = np.zeros(self._K)
@@ -839,16 +367,6 @@ class PushMPTS(MPTS):
         return np.repeat(float(self._push_unlikely_arms), self._K)\
             * (self._compute_init_prior() == 0)
 
-    @property
-    def name(self) -> str:
-        if self._identifier is not None:
-            return self._identifier
-
-        return '%.1f,%.1f-%.1f-push-%s' % (self._push_temporal_correlated_arms,
-                                           self._push_likely_arms,
-                                           self._push_unlikely_arms,
-                                           super().name)
-
     def _pick_arms(self):
         """For each arm a random value gets drawn according to its beta
         distribution. The arms that have the highest L random values get
@@ -882,7 +400,6 @@ class CPushMpts(PushMPTS):
                  push_temporal_correlated_arms: float = 0.0,
                  control_host: str = 'wally113',
                  cpush: float = 1.0,
-                 q: int = 10,
                  one_active_host_sufficient_for_push: bool = True,
                  sliding_window_size: int = None,
                  graph_knowledge: Knowledge = None,
@@ -917,22 +434,14 @@ class CPushMpts(PushMPTS):
             
         self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
         self._cpush = cpush
-        self._max_number_pushes = q
-        self._no_pushed = np.zeros(self._K)
+        self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
+        
         CPushMpts._init_sliding_window(self)
 
     def _init_sliding_window(self):
         if self._sliding_window_size is not None:
             self._sliding_push_received = np.zeros(
                 shape=(self._sliding_window_size, self._K), dtype=bool)
-            self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
-
-    def _update_sliding_window(self):
-        super()._update_sliding_window()
-        self._no_pushed -= self._sliding_push_received[self._sliding_window_index, :]
-
-        self._sliding_push_received[self._sliding_window_index, :] = False
-        self._sliding_push_received[self._sliding_window_index] = self._push_received_this_iteration
 
     def _pick_arms(self):
         """Pushes the arms with the context. Uses the underlying PushMPTS
@@ -948,24 +457,16 @@ class CPushMpts(PushMPTS):
         elif isinstance(self._arm_knowledge, SyntheticPushArmKnowledge):
             self._arm_knowledge.compute_arms_eligible_for_push(current_context)
 
-        arm_gets_pushed = np.logical_and(
-            self._arm_knowledge.arms_eligible_for_push,
-            self._no_pushed < self._max_number_pushes
-        )
+        arm_gets_pushed = self._arm_knowledge.arms_eligible_for_push
 
-        alpha_pushed = self._alpha + arm_gets_pushed * self._cpush
+        self._push_received_this_iteration = np.zeros(self._K, dtype=bool)        
+        self._push_received_this_iteration[arm_gets_pushed] = True
+
+        alpha_pushed = np.where(arm_gets_pushed, self._alpha * self._cpush, self._alpha)
         theta = self._rnd.beta(np.maximum(
             1.0, alpha_pushed + 1), np.maximum(1.0, self._beta + 1))
 
-        picked_arms_indicies = np.argsort(theta)[-self._L:]
-
-        if self._sliding_window_size is not None:
-            self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
-            self._push_received_this_iteration[picked_arms_indicies] = self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
-
-        self._no_pushed[picked_arms_indicies] += self._arm_knowledge.arms_eligible_for_push[picked_arms_indicies]
-
-        return picked_arms_indicies
+        return np.argsort(theta)[-self._L:]
 
     def _dynamically_update_neighborhood(self):
         if self._kind_knowledge == 'push':
@@ -975,25 +476,24 @@ class CPushMpts(PushMPTS):
             self._graph_knowledge.update_active_hosts(active_hosts)
             self._edges = self._graph_knowledge.edges
 
-    @property
-    def name(self):
-        """Returns the name of the bandit algorithm.
-
-        Returns:
-          string: The name
-        """
-        if self._identifier is not None:
-            return self._identifier
-
         kind_str = 'push' if isinstance(self._arm_knowledge, PushArmKnowledge) else 'sim-%d' % self._arm_knowledge.threshold
         host_name = 'one_host' if self._one_active_host_sufficient_for_push else 'two_host'
-        return '%s-%s_c%1.f/%d_%s' % (kind_str, host_name, self._cpush, self._max_number_pushes,
-                                   super().name)
+        return '%s-%s_c%.2f_%s' % (kind_str, host_name, self._cpush, super().name)
 
-    def reset_policy(self):
-        super().reset_policy()
-        self._no_pushed = np.zeros(self._K)
-
+    def _learn(self):
+        reward_this_round = self._reward_df.values[self._iteration, :]
+        picked_arm_receives_update = self._push_received_this_iteration[self._picked_arms_indicies] == False
+        
+        self._alpha[self._picked_arms_indicies] += np.where(
+            picked_arm_receives_update,
+            reward_this_round[self._picked_arms_indicies],
+            0
+        )
+        self._beta[self._picked_arms_indicies] += np.where(
+            picked_arm_receives_update,
+            1 - reward_this_round[self._picked_arms_indicies],
+            0
+        )
 
 class AWCPushMpts(CPushMpts):
     def __init__(self,
@@ -1006,7 +506,6 @@ class AWCPushMpts(CPushMpts):
                  push_temporal_correlated_arms: float = 1.0,
                  control_host: str = 'wally113',
                  cpush: float = 1.0,
-                 q: int = 10,
                  one_active_host_sufficient_for_push: bool = True,
                  mean_diviation=200,
                  sliding_window_size: int = None,
@@ -1042,14 +541,6 @@ class AWCPushMpts(CPushMpts):
 
         self._size_aw += 1
         super().pick_arms()
-
-    @property
-    def name(self):
-        if self._identifier is not None:
-            return self._identifier
-
-        return '%d-mean-divition-%s' % (self._mean_diviation, super().name)
-
 
 class CBAbstractBandit(AbstractBandit):
 
@@ -1192,22 +683,6 @@ class CBFullModel(CBAbstractBandit):
                     warm_start=True
                 )
 
-    @property
-    def name(self):
-        if self._identifier is not None:
-            return self._identifier
-
-        name = 'cb-full-model-%s-%s-%s_b_%d' % (self._context_identifier,
-                                                self._base_algorithm_name,
-                                                self._algorithm_name,
-                                                self._batch_size,)
-
-        if self._algorithm_name == 'egreedy':
-            name = '%s_e_%.2f' % (name, self._algorithm.explore_prob)
-
-        return name
-
-
 class CBStreamingModel(CBAbstractBandit):
     """Contextual bandit using batches to refit models periodically."""
 
@@ -1292,20 +767,3 @@ class CBStreamingModel(CBAbstractBandit):
                 self._batch_size * self._L).reshape(-1, self._L)
             self._received_rewards = np.zeros(
                 self._batch_size * self._L).reshape(-1, self._L)
-
-    @property
-    def name(self):
-        if self._identifier is not None:
-            return self._identifier
-
-        name = 'cb-streaming-model-%s-%s-%s_b_%d' % (
-            self._context_identifier,
-            self._base_algorithm_name,
-            self._algorithm_name,
-            self._batch_size
-        )
-
-        if self._algorithm_name == 'egreedy':
-            name = '%s_e_%.2f' % (name, self._algorithm.explore_prob)
-
-        return name

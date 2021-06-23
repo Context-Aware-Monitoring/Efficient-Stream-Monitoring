@@ -73,6 +73,7 @@ class Knowledge:
 class GraphKnowledge:
     weight: float
     edges: np.ndarray
+    only_push_arms_that_were_not_picked: bool
 
     @property
     def weight(self) -> float:
@@ -84,6 +85,11 @@ class GraphKnowledge:
         are neighbors if self._edges[i,j] is True. The matrix is symmetric.
         """
         return self._edges
+    
+    @property
+    def only_push_arms_that_were_not_picked(self) -> np.ndarray:
+        """If set only the unpicked arms infer knowledge within the group."""
+        return self._only_push_arms_that_were_not_picked
 
 class ArmKnowledge(Knowledge):
     """Contains information about metrics and hosts for the arms."""
@@ -100,6 +106,7 @@ class ArmKnowledge(Knowledge):
     arm_has_temporal_correlation: np.ndarray
     indicies_of_arms_that_will_not_be_explored: np.ndarray
     indicies_of_arms_that_will_be_explored: np.ndarray
+    arm_relevant_for_sliding_window: np.ndarray
 
     def __init__(self, arms: np.ndarray, control_host: str = 'wally113'):
         self._K = len(arms)
@@ -149,6 +156,8 @@ class ArmKnowledge(Knowledge):
             np.isin(self._metrics_for_arm, 'load.min').all(axis=1),
             self._arm_lays_on_same_host
         )
+
+        self._arm_relevant_for_sliding_window = np.isin(self._metrics_for_arm, 'load.min').all(axis=1)
 
     @property
     def arm(self) -> np.ndarray:
@@ -221,6 +230,9 @@ class ArmKnowledge(Knowledge):
         explored"""
         return self._indicies_of_arms_that_will_be_explored
 
+    @property
+    def arm_relevant_for_sliding_window(self):
+        return self._arm_relevant_for_sliding_window    
 
 class DynamicArmKnowledge(ArmKnowledge):
     """Base class for domain knowledge that can change dynamically."""
@@ -243,6 +255,7 @@ class DynamicArmKnowledge(ArmKnowledge):
             self.recompute_properties()
             self._active_hosts = set(active_hosts)
 
+    
 class PushArmKnowledge(DynamicArmKnowledge):
     """Arms are eligible for a push if either one or both of its hosts are
     active.
@@ -364,10 +377,11 @@ class GraphArmKnowledge(DynamicArmKnowledge, GraphKnowledge):
     one neighbor:
       - wally113.cpu.user-wally122.mem.used
     """
-    def __init__(self, arms: np.ndarray, weight: float = 0.5, control_host: str = 'wally113'):
+    def __init__(self, arms: np.ndarray, weight: float = 0.5, control_host: str = 'wally113', only_push_arms_that_were_not_picked: bool = True):
         super().__init__(arms, control_host)
         self._weight = weight
         self._edges = self._compute_edges()
+        self._only_push_arms_that_were_not_picked = only_push_arms_that_were_not_picked
 
     def _compute_edges(self):
         representation_first_part = np.array([
@@ -435,27 +449,31 @@ class GraphArmKnowledge(DynamicArmKnowledge, GraphKnowledge):
 
     @property
     def name(self):
-        return '%.1f-correct-gk' % self._weight
+        only_not_picked = '-only_not_picked_arms' if self._only_push_arms_that_were_not_picked else ''        
+        return '%.1f-correct-gk%s' % (self._weight, only_not_picked)
 
 class SyntheticGraphArmKnowledge(GraphKnowledge):
     edges: np.ndarray
 
-    def __init__(self, arms: np.ndarray, groups: List[int], weight: float =0.5):
+    def __init__(self, arms: np.ndarray, groups: List[int], weight: float =0.5, only_push_arms_that_were_not_picked: bool = True):
         self._K = len(arms)
         self._arms = arms
         self._weight = weight
         self._groups = np.array(groups)
         self._edges = get_adjacency_matrix_from_groups(groups, self._weight)
+        self._only_push_arms_that_were_not_picked = only_push_arms_that_were_not_picked
 
     @property
     def name(self):
-        return '%.1f-correct-synthetic' % (self._weight)
+        only_not_picked = '-only_not_picked_arms' if self._only_push_arms_that_were_not_picked else ''
+        return '%.1f-correct-synthetic%s' % (self._weight, only_not_picked)
 
 class WrongSyntheticGraphArmKnowledge(SyntheticGraphArmKnowledge):
-    def __init__(self, arms: np.ndarray, groups: np.ndarray, error_kind: str, percentage_affected: float, weight: float=0.5, seed=0):
+    def __init__(self, arms: np.ndarray, groups: np.ndarray, error_kind: str, percentage_affected: float, weight: float=0.5, only_push_arms_that_were_not_picked: bool = True, seed=0):
         super().__init__(arms, groups, weight)
         self._rnd = np.random.RandomState(seed)
-        self._unique_groups = np.unique(groups[groups != 0])        
+        self._unique_groups = np.unique(groups[groups != 0])
+        self._only_push_arms_that_were_not_picked = only_push_arms_that_were_not_picked
         self._no_groups = self._unique_groups.shape[0]
         self._percentage_affected = percentage_affected
         self._error_kind = error_kind
@@ -487,9 +505,9 @@ class WrongSyntheticGraphArmKnowledge(SyntheticGraphArmKnowledge):
         
 class WrongGraphArmknowledge(GraphArmKnowledge):
 
-    def __init__(self, arms: np.ndarray, kind: str, n_affected: int, weight: float = 1.0, control_host: str = 'wally113', random_seed=0):
+    def __init__(self, arms: np.ndarray, kind: str, n_affected: int, weight: float = 1.0, control_host: str = 'wally113', only_push_arms_that_were_not_picked: bool = True, random_seed=0):
         self._rnd = np.random.RandomState(random_seed)
-        super().__init__(arms, weight, control_host)
+        super().__init__(arms, weight, control_host, only_push_arms_that_were_not_picked)
 
         self._kind = kind
         self._n_affected = n_affected

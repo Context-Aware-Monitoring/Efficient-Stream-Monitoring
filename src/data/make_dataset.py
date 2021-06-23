@@ -44,20 +44,23 @@ def _generate_synthetic_experiments_for_gk():
         pd.DataFrame(data = reward).to_csv(reward_df_name)
         for weight in [0.2,0.5,0.8,1.0]:
             for L in range(1,101):
-                policies = [
-                        {'name' : 'mpts', 'identifier': 'mpts-%s' % kind},
-                        {
+                policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
+
+                policies.extend([
+                    {
                             'name': 'mpts',
                             'graph_knowledge': {
                                 'name' : 'synthetic',
                                 'weight' : weight,
-                                'groups': groups.tolist()
+                                'groups': groups.tolist(),
+                                'only_push_arms_that_were_not_picked': opatwnp
                             },
-                            'identifier': 'synthetic-%s-mpts-arms-%d-groups-%d-c-%.2f-T-%d-w-%.1f-correct' %(kind, arms, unique_groups.shape[0],c,T,weight)
-                        }
-                    ]
+                            'identifier': 'synthetic-%s-mpts-arms-%d-groups-%d-c-%.2f-T-%d-w-%.1f-correct-push-%s' %(kind, arms, unique_groups.shape[0],c,T,weight, 'some' if opatwnp else 'all')
+                    } for opatwnp in [True, False]
+                ])
+                
                 error_gk_policies = []
-                for error_kind, perc_affected in product(['remove', 'random'], [0.01,0.05,0.1,0.25,0.5,0.75,1.0]):
+                for error_kind, perc_affected, opatwnp in product(['remove', 'random'], [0.01,0.05,0.1,0.25,0.5,0.75,1.0], [True, False]):
                     error_gk_policies.append(
                         {
                             'name': 'mpts',
@@ -66,10 +69,11 @@ def _generate_synthetic_experiments_for_gk():
                                 'weight' : weight,
                                 'groups': groups.tolist(),
                                 'percentage_affected' : perc_affected,
-                                'error_kind' : error_kind
+                                'error_kind' : error_kind,
+                                'only_push_arms_that_were_not_picked': opatwnp
                             },
-                            'identifier': 'synthetic-%s-mpts-arms-%d-groups-%d-c-%.2f-T-%d-w-%.1f-incorrect-%.2f-%s' %(
-                                kind, arms, unique_groups.shape[0],c,T,weight, perc_affected, error_kind)
+                            'identifier': 'synthetic-%s-mpts-arms-%d-groups-%d-c-%.2f-T-%d-w-%.1f-incorrect-%.2f-%s-push-%s' %(
+                                kind, arms, unique_groups.shape[0],c,T,weight, perc_affected, error_kind, 'some' if opatwnp else 'all')
                         }
                     )
                 policies.extend(error_gk_policies)
@@ -77,7 +81,10 @@ def _generate_synthetic_experiments_for_gk():
                     'policies': policies,
                     'reward_path': reward_df_name,
                     'seed': rnd.randint(10000),
-                    'L': L
+                    'L': L,
+                    'T': T,
+                    'c': c,
+                    'dist': kind
                 }
 
                 with open('%s/synthetic_%s_gk_dk_w_%.1f_L_%d_groups_%d_T_%d_c_%.2f.yml' % (global_config.EXPERIMENT_CONFIG_DIR, kind, weight, L, unique_groups.shape[0], T, c), 'w') as outfile:
@@ -85,7 +92,7 @@ def _generate_synthetic_experiments_for_gk():
                     
 
 def _generate_synthetic_experiments_for_push():
-    for c, T, kind in product([0.1, 0.2], [10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
+    for c, T, kind in product([0.3,0.5], [10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
         reward = np.zeros(shape=(T,arms))
 
         mus = rnd.uniform(0, 1-c, arms)
@@ -119,27 +126,27 @@ def _generate_synthetic_experiments_for_push():
             pd.DataFrame(data = context).to_csv(context_path)
 
             for L in range(1,51):
-                policies = [{'name' : 'mpts', 'identifier': 'mpts-gk-%s' % kind}]
-                for cpush in [1,3,5,10]:
-                    for q in [5,10,50,100,500]:
-                        if q > T:
-                            continue
-                        policies.append({
-                                'name': 'cpush-mpts',
-                                'context_path' : context_path,
-                                'kind_knowledge' : 'syn',
-                                'identifier': 'c%d/%d-s-push-%s-mpts-arms-%d-c-%.2f-pc-%.2f-T-%d-' %(
-                                    cpush, q, kind, arms, c, pushes_perc, T),
-                                'cpush': cpush, 'q' : q})
+                policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
+                for cpush in [1.01,1.03,1.05,1.1,1.2,1.25, 1.5,1.75,2.0,2.5,3,5]:
+                    policies.append({
+                            'name': 'cpush-mpts',
+                            'context_path' : context_path,
+                            'kind_knowledge' : 'syn',
+                            'identifier': 'c%.2f-s-push-%s-mpts-arms-%d-c-%.2f-pc-%.2f-T-%d-no_learning_for_pushed_arms' %(
+                                cpush, kind, arms, c, pushes_perc, T),
+                            'cpush': cpush})
 
                 config = {
                     'policies': policies,
                     'reward_path': reward_path,
                     'seed': rnd.randint(10000),
-                    'L': L
+                    'L': L,
+                    'c': c,
+                    'pc': pushes_perc,
+                    'T': T
                 }
 
-                with open('%s/synthetic_push_%s_c_%.2f_pc_%.2f_arms_%d_T_%d_L_%d.yml' % (
+                with open('%s/synthetic_push_multiply_%s_c_%.2f_pc_%.2f_arms_%d_T_%d_L_%d.yml' % (
                     global_config.EXPERIMENT_CONFIG_DIR, kind, c, pushes_perc, arms, T, L), 'w') as outfile:
                     yaml.dump(config, outfile, default_flow_style=False)                    
 
@@ -396,13 +403,23 @@ def _generate_egreedy_parameter_optimization():
 
 def _generate_mpts():
     policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
+
+    policies.extend(
+        get_cross_validated_policies(
+            {'name': 'mpts'},
+            {
+                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES
+            }
+        )
+    )
     
     policies.extend(
         get_cross_validated_policies(
             {'name': 'mpts'},
             {
                 'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES,
-                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES
+                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
+                'sliding_window_type' : ['all', 'some']
             }
         )
     )
@@ -419,28 +436,6 @@ def _generate_mpts():
     
     _write_configs_for_policies(policies, name='mpts')
 
-
-def _generate_egreedy():
-    policies = []
-
-    policies.extend(get_cross_validated_policies(
-        {'name' : 'egreedy'},
-        {'epsilon' : [0,0.1]}
-    ))
-    
-    policies.extend(get_cross_validated_policies(
-        {'name': 'dkegreedy'},
-        {
-            'epsilon' : [0.0,0.1],
-            'init_ev_likely_arms': [0.8,1.0],
-            'init_ev_temporal_correlated_arms': [0.8,1.0],
-            'init_ev_unlikely_arms': [0.0,0.5],
-            # 'graph_knowledge': global_config.GRAPH_DOMAIN_KNOWLEDGES,
-            # 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES
-        }))
-    
-    _write_configs_for_policies(policies, name='egreedy_baseline')
-
 def _generate_cb():
     policies = [{'name' : 'mpts'}]
 
@@ -455,88 +450,6 @@ def _generate_cb():
 
     _write_configs_for_policies(policies, name='cb', binary_rewards_only=True)
 
-def _generate_awcdkegreedy():
-    policies = []
-
-    policies.extend(
-        get_cross_validated_policies(
-            {
-                'name': 'awcdkegreedy',
-                'context_path':
-                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
-                'push_kind': 'plus',
-                'init_ev_likely_arms': 0.8,
-                'init_ev_temporal_correlated_arms': 1.0,
-                'max_number_pushes': 100,
-                'push_kind': 'multiply',
-                'one_active_host_sufficient_for_push': True,
-                'mean_diviation': 1000
-            },
-            {
-                'epsilon': [0, 0.1],
-                'push': [1.0, 1.2],
-                'graph_knowledge': [{'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}, None]
-            }
-        )
-    )
-
-    _write_configs_for_policies(policies, name='awcdkegreedy')
-
-
-def _generate_cdkegreedy():
-    policies = []
-
-    policies.extend(
-        get_cross_validated_policies(
-            {
-                'name': 'cdkegreedy',
-                'context_path':
-                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
-                'push_kind': 'plus',
-                'init_ev_likely_arms': 0.8,
-                'init_ev_temporal_correlated_arms': 1.0,
-                'init_ev_unlikely_arms': 0.5,
-                'push_kind': 'multiply'
-            },
-            {
-                'epsilon': [0, 0.1],
-                'one_active_host_sufficient_for_push': [True, False],
-                'push': [1.0, 1.1, 1.2],
-                'max_number_pushes': [10,100,1000]
-                # 'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-                # 'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
-            }
-        )
-    )
-
-    _write_configs_for_policies(policies, name='cdkegreedy')
-
-def _generate_sim_cdkegreedy():
-    policies = []
-
-    policies.extend(
-        get_cross_validated_policies(
-            {
-                'name': 'cdkegreedy',
-                'context_path':
-                global_config.DATA_DIR + '/processed/context/%s_context_sim_w%d_s%d.csv',
-                'push_kind': 'plus',
-                'init_ev_likely_arms': 0.8,
-                'init_ev_temporal_correlated_arms': 1.0,
-                'kind_knowledge': 'sim'
-            },
-            {
-                'epsilon': [0, 0.1],
-                'push': [0.01,0.05,0.1,0.2],
-                'threshold': [100,1000,2000,5000],
-                'max_number_pushes': [10,100,1000]
-            }
-        )
-    )
-
-    _write_configs_for_policies(policies, name='sim_cdkegreedy')    
-
-
 def _generate_awcpush_mpts():
     policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
 
@@ -549,7 +462,6 @@ def _generate_awcpush_mpts():
                 'push_likely_arms': 0,
                 'push_unlikely_arms': 10,
                 'push_temporal_correlated_arms': 1.0,
-                'q': 100,
                 'mean_diviation': 1000
             },
             {
@@ -564,7 +476,7 @@ def _generate_awcpush_mpts():
 
 
 def _generate_cpush_mpts():
-    policies = []
+    policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
 
     policies.extend(
         get_cross_validated_policies(
@@ -577,15 +489,14 @@ def _generate_cpush_mpts():
                 'push_temporal_correlated_arms': 0
             },
             {
-                'q': [10,100,1000],
+
                 'one_active_host_sufficient_for_push': [True, False],
-                'cpush': [1, 5, 10],
-                'graph_knowledge': [None, {'name': 'correct', 'weight': 1.0}, {'name': 'correct', 'weight': 0.8}]
+                'cpush': [1.1, 1.25, 1.5, 2.0, 3, 5]
             }
         )
     )
 
-    _write_configs_for_policies(policies, name='cpush_mpts')
+    _write_configs_for_policies(policies, name='cpush_mpts_no_learning_for_pushed_arms_multiply')
 
 def _generate_sim_cpush_mpts():
     policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
@@ -603,7 +514,6 @@ def _generate_sim_cpush_mpts():
             {
                 'graph_knowledge' : [{'name' : 'correct', 'weight' : 1.0}, None],                
                 'threshold' : [1000, 100, 10, 50],
-                'q': [10,100],
                 'cpush': [1,3,5],
                 'push_unlikely_arms': [0,10]
             }
@@ -617,12 +527,12 @@ def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
 
-    _generate_mpts()
-    _generate_sim_cpush_mpts()
-    _generate_cpush_mpts()
+    # _generate_mpts()
+    # _generate_sim_cpush_mpts()
+    # _generate_cpush_mpts()
     # _generate_cb()
-    # _generate_synthetic_experiments_for_gk()
-    # _generate_synthetic_experiments_for_push()
+    _generate_synthetic_experiments_for_gk()
+    _generate_synthetic_experiments_for_push()
 
 
 

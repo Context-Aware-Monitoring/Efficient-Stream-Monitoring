@@ -12,7 +12,7 @@ import yaml
 import numpy as np
 import pandas as pd
 from models.domain_knowledge import GraphArmKnowledge, RandomGraphKnowledge, WrongGraphArmknowledge, SyntheticGraphArmKnowledge, WrongSyntheticGraphArmKnowledge
-from models.policy import RandomPolicy, EGreedy, MPTS, DKEGreedy, PushMPTS, CPushMpts, CDKEGreedy, CBFullModel, CBStreamingModel, AWCDKEGreedy, AWCPushMpts
+from models.policy import RandomPolicy, MPTS, PushMPTS, CPushMpts, CBFullModel, CBStreamingModel, AWCPushMpts
 
 DATA_DIR = '%s/data' % dirname(dirname(abspath(__file__)))
 SERIALIZATION_DIR = '%s/processed/experiment_results/' % DATA_DIR
@@ -183,21 +183,9 @@ class Experiment:
         elif name == 'mpts':
             pol = MPTS(self._L, self._reward_df,
                        self._seed, **config_for_policy)
-        elif name in ('egreedy', 'greedy'):
-            pol = EGreedy(self._L, self._reward_df,
-                          self._seed, **config_for_policy)
         elif name == 'push-mpts':
             pol = PushMPTS(self._L, self._reward_df,
                            self._seed, **config_for_policy)
-        elif name == 'dkegreedy':
-            pol = DKEGreedy(self._L, self._reward_df,
-                            self._seed, **config_for_policy)
-        elif name == 'cdkegreedy':
-            pol = CDKEGreedy(self._L, self._reward_df,
-                             self._seed, context, **config_for_policy)
-        elif name == 'awcdkegreedy':
-            pol = AWCDKEGreedy(self._L, self._reward_df,
-                               self._seed, context, **config_for_policy)
         elif name == 'cpush-mpts':
             pol = CPushMpts(self._L, self._reward_df,
                             self._seed, context, **config_for_policy)
@@ -230,29 +218,7 @@ class Experiment:
             yaml_file = '%sexperiment%s_config.yml' % (
                 SERIALIZATION_DIR, experiment_id)
 
-        # cum_regret_csv_file = '%scum_regret_experiment_%s.csv' % (
-        #     SERIALIZATION_DIR,
-        #     experiment_id)
-        # average_regret_csv_file = '%saverage_regret_experiment_%s.csv' % (
-        #     SERIALIZATION_DIR,
-        #     experiment_id)
-
-        # cum_regret_df = pd.DataFrame(data=self._average_cum_regret)
-        # average_regret_df = pd.DataFrame(data=self._average_regret)
-
-        # cum_regret_df.to_csv(cum_regret_csv_file)
-        # average_regret_df.to_csv(average_regret_csv_file)
         with open(yaml_file, 'w') as outfile:
-            self._config |= {
-                'results':
-                {
-                    policy_name: float("{:.2f}".format(
-                        average_cum_regret_for_policy[-1]))
-                    for policy_name, average_cum_regret_for_policy in self._average_cum_regret.items()
-                },
-                # 'cum_regret_csv_file': cum_regret_csv_file,
-                # 'average_regret_csv_file': average_regret_csv_file
-            }
             yaml.dump(self._config, outfile, default_flow_style=False)
 
     def run(self):
@@ -270,35 +236,19 @@ class Experiment:
             cum_regret_each_run = np.zeros(
                 shape=(self._T, self._number_of_runs))
 
-            name = None
             for current_run in range(self._number_of_runs):
                 pol = self._create_policy(pol_config)
 
                 if pol is None:
                     break
 
-                name = pol.name
                 pol.run()
+
                 regret_each_run[:, current_run] = pol.regret
                 cum_regret_each_run[:, current_run] = pol.cum_regret
                 del pol
 
-            self._average_regret[name] = regret_each_run.mean(axis=1)
-            self._average_cum_regret[name] = cum_regret_each_run.mean(axis=1)
-
-        ordered_policies = sorted(
-            self._average_cum_regret.keys(),
-            key=lambda pol_name: self._average_cum_regret[pol_name][-1])
-
-        ordered_average_regret = {}
-        ordered_average_cum_regret = {}
-
-        for pol_name in ordered_policies:
-            ordered_average_regret[pol_name] = self._average_regret[pol_name]
-            ordered_average_cum_regret[pol_name] = self._average_cum_regret[pol_name]
-
-        self._average_regret = ordered_average_regret
-        self._average_cum_regret = ordered_average_cum_regret
+            pol_config['regret']= float(cum_regret_each_run.mean(axis=1)[-1])
 
         self.serialize_results()
 
