@@ -92,7 +92,7 @@ def _generate_synthetic_experiments_for_gk():
                     
 
 def _generate_synthetic_experiments_for_push():
-    for c, T, kind in product([0.3,0.5], [10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
+    for c, T, kind in product([0.1,0.2,0.3,0.5], [10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
         reward = np.zeros(shape=(T,arms))
 
         mus = rnd.uniform(0, 1-c, arms)

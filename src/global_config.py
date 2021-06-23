@@ -29,26 +29,26 @@ END_TRACES_SEQUENTIAL = np.datetime64('2019-11-20 01:30:00')
 START_TRACES_CONCURRENT = np.datetime64('2019-11-25 15:12:13')
 END_TRACES_CONCURRENT = np.datetime64('2019-11-25 19:45:00')
 
-SLIDING_WINDOW_SIZES = [None, 500, 1000]
+SLIDING_WINDOW_SIZES = [500, 1000]
 
 GRAPH_DOMAIN_KNOWLEDGES = [
     None
 ]
 
 GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'correct', 'weight': weight} for weight in [0.8,1.0]
+    {'name' : 'correct', 'weight': weight, 'only_push_arms_that_were_not_picked' : opatwnp} for weight, opatwnp in product([0.8,1.0], [True, False])
 ])
 
 GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'unify', 'weight': weight, 'n_affected' : n_affected} for weight, n_affected in product([0.8,1.0], [1,2,5,10])
+    {'name' : 'unify', 'weight': weight, 'n_affected' : n_affected, 'only_push_arms_that_were_not_picked': opatwnp} for weight, n_affected, opatwnp in product([0.8,1.0], [1,2,5,10], [True, False])
 ])
 
 GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'add', 'weight': weight, 'n_affected' : n_affected} for weight, n_affected in product([0.2,0.5,0.8,1.0], [1,2,5,10,15])
+    {'name' : 'add', 'weight': weight, 'n_affected' : n_affected, 'only_push_arms_that_were_not_picked': opatwnp} for weight, n_affected, opatwnp in product([0.2,0.5,0.8,1.0], [1,2,5,10,15], [True, False])
 ])
 
 GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'remove', 'weight': weight, 'n_affected' : n_affected} for weight, n_affected in product([0.8,1.0], [1,5,10,20,50,100,200,300,420])
+    {'name' : 'remove', 'weight': weight, 'n_affected' : n_affected, 'only_push_arms_that_were_not_picked': opatwnp} for weight, n_affected, opatwnp in product([0.8,1.0], [1,5,10,20,50,100,200,300,420], [True, False])
 ])
 
 
