@@ -142,7 +142,8 @@ class AbstractBandit(ABC):
             axis=0)
         arm_gets_update = arm_number_of_updates > 0
 
-        arm_gets_update[self._picked_arms_indicies] = False
+        if self._graph_knowledge.only_push_arms_that_were_not_picked:
+            arm_gets_update[self._picked_arms_indicies] = False
 
         reshaped_rewards = np.repeat(
             self._reward_df.values[self._iteration, self._picked_arms_indicies], self._K).reshape(-1, self._K)
