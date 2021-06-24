@@ -486,10 +486,6 @@ class CPushMpts(PushMPTS):
             self._graph_knowledge.update_active_hosts(active_hosts)
             self._edges = self._graph_knowledge.edges
 
-        kind_str = 'push' if isinstance(self._arm_knowledge, PushArmKnowledge) else 'sim-%d' % self._arm_knowledge.threshold
-        host_name = 'one_host' if self._one_active_host_sufficient_for_push else 'two_host'
-        return '%s-%s_c%.2f_%s' % (kind_str, host_name, self._cpush, super().name)
-
     def _learn(self):
         reward_this_round = self._reward_df.values[self._iteration, :]
         picked_arm_receives_update = self._push_received_this_iteration[self._picked_arms_indicies] == False
@@ -750,6 +746,7 @@ class CBStreamingModel(CBAbstractBandit):
     def _learn(self):
         # (re)fit model
         if self._iteration > 0 and self._iteration % self._batch_size == 0:
+            breakpoint()
             if self._iteration == self._batch_size:
                 self._algorithm.fit(
                     repeat_entry_L_times(
