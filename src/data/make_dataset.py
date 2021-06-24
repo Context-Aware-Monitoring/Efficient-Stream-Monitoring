@@ -479,7 +479,7 @@ def _generate_awcpush_mpts():
     _write_configs_for_policies(policies, name='awcpush_mpts')
 
 
-def _generate_cpush_mptscd():
+def _generate_cpush_mpts():
     policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
 
     policies.extend(
