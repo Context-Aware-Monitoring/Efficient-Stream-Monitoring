@@ -16,7 +16,7 @@ from itertools import product
 groups = np.repeat(np.arange(10) + 1, 10)
 rnd = np.random.RandomState(10)
 arms = 100
-seed = 0
+seed = str(time.time())
 
 def _generate_synthetic_experiments_for_gk():
     for c, T, kind in product([0, 0.01,0.05,0.1, 0.2], [10, 100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
@@ -532,11 +532,11 @@ def _generate_experiment_configs():
     print('Generate experiment configs')
 
     # _generate_mpts()
-    # _generate_sim_cpush_mpts()
-    # _generate_cpush_mpts()
-    _generate_cb()
+    _generate_sim_cpush_mpts()
+    _generate_cpush_mpts()
+    # _generate_cb()
     # _generate_synthetic_experiments_for_gk()
-    # _generate_synthetic_experiments_for_push()
+    _generate_synthetic_experiments_for_push()
 
 
 
