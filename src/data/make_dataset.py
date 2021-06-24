@@ -437,15 +437,19 @@ def _generate_mpts():
     _write_configs_for_policies(policies, name='mpts')
 
 def _generate_cb():
-    policies = [{'name' : 'mpts'}]
+    policies = [{'name' : 'mpts', 'identifier' : 'baseline'}, {'name': 'random'}]
 
     policies.append(
-            {'name': 'cb-streaming-model',
-             'context_path': global_config.DATA_DIR
-             + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
-             'context_identifier': 'workload',
-             'base_algorithm_name' : 'linear_regression',
-             'algorithm_name' : 'bootstrapped_ucb'
+            {
+                'name': 'cb-streaming-model',
+                'context_path': global_config.DATA_DIR
+                + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
+                'context_identifier': 'workload',
+                'max_iter' : 1000,
+                'scaler_sample_size' : 5000,
+                'batch_size' : 100,
+                'base_algorithm_name' : 'linear_regression',
+                'algorithm_name' : 'bootstrapped_ucb'
     })
 
     _write_configs_for_policies(policies, name='cb', binary_rewards_only=True)
@@ -530,9 +534,9 @@ def _generate_experiment_configs():
     # _generate_mpts()
     # _generate_sim_cpush_mpts()
     # _generate_cpush_mpts()
-    # _generate_cb()
-    _generate_synthetic_experiments_for_gk()
-    _generate_synthetic_experiments_for_push()
+    _generate_cb()
+    # _generate_synthetic_experiments_for_gk()
+    # _generate_synthetic_experiments_for_push()
 
 
 

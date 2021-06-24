@@ -182,13 +182,21 @@ class RandomPolicy(AbstractBandit):
                  L: int,
                  reward_df: pd.DataFrame,
                  random_seed: int,
+                 sliding_window_size: int = None,                 
+                 graph_knowledge: Knowledge = None,
                  identifier: typing.Optional[str] = None
                  ):
-        super().__init__(L, reward_df, identifier=identifier)
+        super().__init__(L, reward_df, sliding_window_size=sliding_window_size, graph_knowledge=graph_knowledge, identifier=identifier)
         self._rnd = np.random.RandomState(random_seed)
 
     def _pick_arms(self):
         return self._rnd.choice(self._K, self._L, replace=False)
+
+    def _learn(self):
+        pass
+
+    def _update_parameters_for_neighbored_arms(self, update, arm_gets_update, number_updates):
+        pass
 
 class MPTS(AbstractBandit):
     """Multi-Play Thompson-Sampling bandit algorithm. This baysian bandit
@@ -421,7 +429,9 @@ class CPushMpts(PushMPTS):
                          control_host, sliding_window_size=sliding_window_size,
                          graph_knowledge=graph_knowledge, identifier=identifier)
         assert reward_df.values.shape[0] == context_df.values.shape[0]
-        
+
+        self._alpha = np.ones(self._K)
+        self._beta = np.ones(self._K)
         self._context_df = context_df
         self._kind_knowledge = kind_knowledge
         if kind_knowledge == 'push':
