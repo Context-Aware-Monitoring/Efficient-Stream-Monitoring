@@ -16,7 +16,7 @@ from itertools import product
 groups = np.repeat(np.arange(10) + 1, 10)
 rnd = np.random.RandomState(10)
 arms = 100
-seed = str(time.time())
+seed = str(time())
 
 def _generate_synthetic_experiments_for_gk():
     for c, T, kind in product([0, 0.01,0.05,0.1, 0.2], [10, 100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
@@ -479,7 +479,7 @@ def _generate_awcpush_mpts():
     _write_configs_for_policies(policies, name='awcpush_mpts')
 
 
-def _generate_cpush_mpts():
+def _generate_cpush_mptscd():
     policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
 
     policies.extend(
