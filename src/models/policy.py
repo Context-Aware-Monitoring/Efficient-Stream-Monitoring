@@ -33,7 +33,6 @@ class AbstractBandit(ABC):
     regret: List[float]
     cum_regret: List[float]
     average_regret: List[float]
-    name: str
 
     def __init__(self,
                  L: int,

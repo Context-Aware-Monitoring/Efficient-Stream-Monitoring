@@ -404,25 +404,25 @@ def _generate_egreedy_parameter_optimization():
 def _generate_mpts():
     policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
 
-    policies.extend(
-        get_cross_validated_policies(
-            {'name': 'mpts'},
-            {
-                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES
-            }
-        )
-    )
+    # policies.extend(
+    #     get_cross_validated_policies(
+    #         {'name': 'mpts'},
+    #         {
+    #             'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES
+    #         }
+    #     )
+    # )
     
-    policies.extend(
-        get_cross_validated_policies(
-            {'name': 'mpts'},
-            {
-                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES,
-                'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
-                'sliding_window_type' : ['all', 'some']
-            }
-        )
-    )
+    # policies.extend(
+    #     get_cross_validated_policies(
+    #         {'name': 'mpts'},
+    #         {
+    #             'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES,
+    #             'sliding_window_size': global_config.SLIDING_WINDOW_SIZES,
+    #             'sliding_window_type' : ['all', 'some']
+    #         }
+    #     )
+    # )
 
     policies.extend(
         get_cross_validated_policies(
@@ -434,7 +434,7 @@ def _generate_mpts():
         )
     )
     
-    _write_configs_for_policies(policies, name='mpts')
+    _write_configs_for_policies(policies, name='mpts_static_push_smaller_window_size')
 
 def _generate_cb():
     policies = [{'name' : 'mpts', 'identifier' : 'baseline'}, {'name': 'random'}]
@@ -531,12 +531,12 @@ def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
 
-    # _generate_mpts()
-    _generate_sim_cpush_mpts()
-    _generate_cpush_mpts()
+    _generate_mpts()
+    # _generate_sim_cpush_mpts()
+    # _generate_cpush_mpts()
     # _generate_cb()
     # _generate_synthetic_experiments_for_gk()
-    _generate_synthetic_experiments_for_push()
+    # _generate_synthetic_experiments_for_push()
 
 
 
