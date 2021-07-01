@@ -13,7 +13,7 @@ import itertools
 import pandas as pd
 import typing
 from typing import List, Tuple
-from .domain_knowledge import ArmKnowledge, PushArmKnowledge, GraphArmKnowledge, RandomGraphKnowledge, Knowledge, SimiliarPushArmKnowledge, SyntheticPushArmKnowledge
+from .domain_knowledge import ArmKnowledge, PushArmKnowledge, GraphArmKnowledge, RandomGraphKnowledge, Knowledge, SimiliarPushArmKnowledge, SyntheticPushArmKnowledge, StaticPushArmKnowledge
 
 np.seterr(invalid='ignore')
 np.seterr(divide='ignore')
@@ -40,6 +40,7 @@ class AbstractBandit(ABC):
                  sliding_window_size: int = None,
                  sliding_window_type: str = None,
                  graph_knowledge: Knowledge = None,
+                 arm_knowledge: Knowledge = None,
                  identifier: typing.Optional[str] = None
                  ):
         self._L = L
@@ -53,7 +54,8 @@ class AbstractBandit(ABC):
         self._regret = np.zeros(self._T)
 
         self._graph_knowledge = graph_knowledge
-
+        self._arm_knowledge = arm_knowledge
+        
         self._sliding_window_size = sliding_window_size
         if sliding_window_size is not None:
             self._sliding_window_type = sliding_window_type
@@ -183,9 +185,10 @@ class RandomPolicy(AbstractBandit):
                  random_seed: int,
                  sliding_window_size: int = None,                 
                  graph_knowledge: Knowledge = None,
+                 arm_knowledge: Knowledge =None,
                  identifier: typing.Optional[str] = None
                  ):
-        super().__init__(L, reward_df, sliding_window_size=sliding_window_size, graph_knowledge=graph_knowledge, identifier=identifier)
+        super().__init__(L, reward_df, sliding_window_size=sliding_window_size, graph_knowledge=graph_knowledge, arm_knowledge=arm_knowledge,identifier=identifier)
         self._rnd = np.random.RandomState(random_seed)
 
     def _pick_arms(self):
@@ -210,6 +213,7 @@ class MPTS(AbstractBandit):
                  sliding_window_size: int = None,
                  sliding_window_type: str = None,
                  graph_knowledge: Knowledge = None,
+                 arm_knowledge: Knowledge = None,
                  identifier: typing.Optional[str] = None
                  ):
         """Constructs the MPTS policy.
@@ -223,6 +227,7 @@ class MPTS(AbstractBandit):
             sliding_window_size=sliding_window_size,
             sliding_window_type=sliding_window_type,
             graph_knowledge=graph_knowledge,
+            arm_knowledge=arm_knowledge,
             identifier=identifier
         )
 
@@ -317,6 +322,7 @@ class PushMPTS(MPTS):
                  control_host: str = 'wally113',
                  sliding_window_size: int = None,
                  graph_knowledge: Knowledge = None,
+                 arm_knowledge: Knowledge = None,
                  identifier: typing.Optional[str] = None
                  ):
         """Constructs the Push Mpts algorithm.
@@ -331,16 +337,14 @@ class PushMPTS(MPTS):
         """
         super().__init__(L, reward_df, random_seed,
                          sliding_window_size=sliding_window_size,
-                         graph_knowledge=graph_knowledge, identifier=identifier)
+                         graph_knowledge=graph_knowledge, arm_knowledge=arm_knowledge,identifier=identifier)
 
         self._push_temporal_correlated_arms = 0.0
         self._push_likely_arms = 0.0
         self._push_unlikely_arms = 0.0
         
         if push_likely_arms > 0.0 or push_unlikely_arms > 0.0 or push_temporal_correlated_arms > 0.0:
-        
-            self._arm_knowledge = ArmKnowledge(self._arms, control_host)
-
+            assert isinstance(self._arm_knowledge, StaticPushArmKnowledge)
             self._push_temporal_correlated_arms = push_temporal_correlated_arms
             self._push_likely_arms = push_likely_arms
             self._push_unlikely_arms = push_unlikely_arms
@@ -359,10 +363,8 @@ class PushMPTS(MPTS):
           float[]: Prior distribution
         """
         return np.repeat(float(self._push_likely_arms), self._K)\
-            * np.logical_or(
-                self._arm_knowledge.arm_lays_on_same_host,
-                self._arm_knowledge.arm_lays_on_control_host
-        )
+            * self._arm_knowledge.arm_likely
+    
 
     def _compute_init_posterior(self) -> np.ndarray:
         """Computes the posterior distribution (beta) for the arms.
@@ -372,7 +374,7 @@ class PushMPTS(MPTS):
           float[]: Posterior distribution
         """
         return np.repeat(float(self._push_unlikely_arms), self._K)\
-            * (self._compute_init_prior() == 0)
+            * (self._arm_knowledge.arm_likely == False)
 
     def _pick_arms(self):
         """For each arm a random value gets drawn according to its beta
@@ -381,7 +383,9 @@ class PushMPTS(MPTS):
         """
         theta = self._rnd.beta(np.maximum(
             1.0, self._alpha + 1), np.maximum(1.0, self._beta + 1))
-        # theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
+    
+        if self._arm_knowledge is not None:
+            theta[self._arm_knowledge.indicies_of_arms_that_will_not_be_explored] = 0.0
 
         return np.argsort(theta)[-self._L:]
 
@@ -407,10 +411,11 @@ class CPushMpts(PushMPTS):
                  push_temporal_correlated_arms: float = 0.0,
                  control_host: str = 'wally113',
                  cpush: float = 1.0,
-                 one_active_host_sufficient_for_push: bool = True,
                  sliding_window_size: int = None,
                  graph_knowledge: Knowledge = None,
-                 kind_knowledge = 'push',
+                 arm_knowledge: Knowledge=None,
+                 push_kind='plus',
+                 learn_pushed = False,
                  identifier: typing.Optional[str] = None,
                  **kwargs
                  ):
@@ -422,28 +427,20 @@ class CPushMpts(PushMPTS):
           cpush (float): Push for active arms
           max_number_pushes (int): Number of times an arm gets pushed
         """
-
         super().__init__(L, reward_df, random_seed, push_likely_arms,
                          push_unlikely_arms, push_temporal_correlated_arms,
                          control_host, sliding_window_size=sliding_window_size,
-                         graph_knowledge=graph_knowledge, identifier=identifier)
+                         graph_knowledge=graph_knowledge, arm_knowledge=arm_knowledge,
+                         identifier=identifier)
         assert reward_df.values.shape[0] == context_df.values.shape[0]
 
         self._alpha = np.ones(self._K)
         self._beta = np.ones(self._K)
         self._context_df = context_df
-        self._kind_knowledge = kind_knowledge
-        if kind_knowledge == 'push':
-            self._arm_knowledge = PushArmKnowledge(
-                self._arms, one_active_host_sufficient_for_push, control_host)
-        elif kind_knowledge == 'sim':
-            self._arm_knowledge = SimiliarPushArmKnowledge(self._arms, kwargs['threshold'], self._context_df.columns.values, control_host)
-        elif kind_knowledge == 'syn':
-            self._arm_knowledge = SyntheticPushArmKnowledge(self._arms)
-            
-        self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
         self._cpush = cpush
         self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
+        self._push_kind = push_kind
+        self._learn_pushed = learn_pushed
         
         CPushMpts._init_sliding_window(self)
 
@@ -458,47 +455,46 @@ class CPushMpts(PushMPTS):
         """
         current_context = self._context_df.values[self._iteration, :]
 
-        if isinstance(self._arm_knowledge, SimiliarPushArmKnowledge):
-            self._arm_knowledge._compute_arms_eligible_for_push(current_context)
-        elif isinstance(self._arm_knowledge, PushArmKnowledge):
-            active_hosts = self._context_df.columns.values[current_context > 0]
-            self._arm_knowledge.update_active_hosts(active_hosts)
-        elif isinstance(self._arm_knowledge, SyntheticPushArmKnowledge):
-            self._arm_knowledge.compute_arms_eligible_for_push(current_context)
+        self._arm_knowledge.compute_arms_eligible_for_push(current_context)
 
         arm_gets_pushed = self._arm_knowledge.arms_eligible_for_push
 
         self._push_received_this_iteration = np.zeros(self._K, dtype=bool)        
         self._push_received_this_iteration[arm_gets_pushed] = True
 
-        alpha_pushed = np.where(arm_gets_pushed, self._alpha * self._cpush, self._alpha)
+        if self._push_kind == 'plus':
+            alpha_pushed = np.where(arm_gets_pushed, self._alpha + self._cpush, self._alpha)
+        else:
+            alpha_pushed = np.where(arm_gets_pushed, self._alpha * self._cpush, self._alpha)
         theta = self._rnd.beta(np.maximum(
             1.0, alpha_pushed + 1), np.maximum(1.0, self._beta + 1))
 
         return np.argsort(theta)[-self._L:]
 
     def _dynamically_update_neighborhood(self):
-        if self._kind_knowledge == 'push':
+        if isinstance(self._arm_knowledge, PushArmKnowledge):
             current_context = self._context_df.values[self._iteration, :]
             active_hosts = self._context_df.columns.values[current_context > 0]
 
             self._graph_knowledge.update_active_hosts(active_hosts)
-            self._edges = self._graph_knowledge.edges
 
     def _learn(self):
-        reward_this_round = self._reward_df.values[self._iteration, :]
-        picked_arm_receives_update = self._push_received_this_iteration[self._picked_arms_indicies] == False
-        
-        self._alpha[self._picked_arms_indicies] += np.where(
-            picked_arm_receives_update,
-            reward_this_round[self._picked_arms_indicies],
-            0
-        )
-        self._beta[self._picked_arms_indicies] += np.where(
-            picked_arm_receives_update,
-            1 - reward_this_round[self._picked_arms_indicies],
-            0
-        )
+        if self._learn_pushed == True:
+            super()._learn()
+        else:
+            reward_this_round = self._reward_df.values[self._iteration, :]
+            picked_arm_receives_update = self._push_received_this_iteration[self._picked_arms_indicies] == False
+
+            self._alpha[self._picked_arms_indicies] += np.where(
+                picked_arm_receives_update,
+                reward_this_round[self._picked_arms_indicies],
+                0
+            )
+            self._beta[self._picked_arms_indicies] += np.where(
+                picked_arm_receives_update,
+                1 - reward_this_round[self._picked_arms_indicies],
+                0
+            )
 
 class AWCPushMpts(CPushMpts):
     def __init__(self,
@@ -511,7 +507,6 @@ class AWCPushMpts(CPushMpts):
                  push_temporal_correlated_arms: float = 1.0,
                  control_host: str = 'wally113',
                  cpush: float = 1.0,
-                 one_active_host_sufficient_for_push: bool = True,
                  mean_diviation=200,
                  sliding_window_size: int = None,
                  graph_knowledge: Knowledge = None,
@@ -520,7 +515,7 @@ class AWCPushMpts(CPushMpts):
         assert sliding_window_size is None
 
         super().__init__(L, reward_df, random_seed, context_df, push_likely_arms, push_unlikely_arms, push_temporal_correlated_arms,
-              control_host, cpush, q, one_active_host_sufficient_for_push, sliding_window_size, graph_knowledge, identifier)
+              control_host, cpush, q, sliding_window_size, graph_knowledge, identifier)
 
         self._mean_diviation = mean_diviation
         self._context_mean = None
@@ -745,7 +740,6 @@ class CBStreamingModel(CBAbstractBandit):
     def _learn(self):
         # (re)fit model
         if self._iteration > 0 and self._iteration % self._batch_size == 0:
-            breakpoint()
             if self._iteration == self._batch_size:
                 self._algorithm.fit(
                     repeat_entry_L_times(

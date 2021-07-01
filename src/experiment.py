@@ -11,7 +11,7 @@ from datetime import datetime
 import yaml
 import numpy as np
 import pandas as pd
-from models.domain_knowledge import GraphArmKnowledge, RandomGraphKnowledge, WrongGraphArmknowledge, SyntheticGraphArmKnowledge, WrongSyntheticGraphArmKnowledge
+from models.domain_knowledge import GraphArmKnowledge, RandomGraphKnowledge, WrongGraphArmknowledge, SyntheticGraphArmKnowledge, WrongSyntheticGraphArmKnowledge, ArmKnowledge, SyntheticPushArmKnowledge, PushArmKnowledge, SimiliarPushArmKnowledge, SyntheticStaticPushKnowledge, WrongSyntheticStaticPushKnowledge
 from models.policy import RandomPolicy, MPTS, PushMPTS, CPushMpts, CBFullModel, CBStreamingModel, AWCPushMpts
 
 DATA_DIR = '%s/data' % dirname(dirname(abspath(__file__)))
@@ -131,6 +131,34 @@ class Experiment:
         self._average_regret = {}
         self._average_cum_regret = {}
 
+    def _read_arm_knowledge_from_config(self, config, context_df: pd.DataFrame):
+        if 'arm_knowledge' not in config or config['arm_knowledge'] is None:
+            return None
+
+        name = config['arm_knowledge'].get('name')
+        if name is None:
+            return None
+
+        arms = self._reward_df.columns.values
+        if name == 'correct':
+            return ArmKnowledge(arms, 'wally113')
+        elif name == 'push':
+            one_active_host_sufficient_for_push = config['arm_knowledge'].get('one_active_host_sufficient_for_push', True)
+            return PushArmKnowledge(arms, context_df.columns.values, one_active_host_sufficient_for_push, 'wally113')
+        elif name == 'sim':
+            threshold = config['arm_knowledge'].get('threshold', 1000)
+            return SimiliarPushArmKnowledge(arms, threshold, context_df.columns.values, 'wally113')
+        elif name == 'synthetic-dynamic-push':
+            return SyntheticPushArmKnowledge(arms)
+        elif name == 'synthetic-static-push':
+            return SyntheticStaticPushKnowledge()
+        elif name == 'synthetic-static-push-wrong':
+            random_seed = self._seed
+            self._seed += 1
+            return WrongSyntheticStaticPushKnowledge(config['arm_knowledge']['kind'], config['arm_knowledge']['percentage_affected'], random_seed)
+
+        return None
+        
     def _read_graph_knowledge_from_config(self, config):
         if 'graph_knowledge' not in config or config['graph_knowledge'] is None:
             return None
@@ -172,8 +200,10 @@ class Experiment:
         context = _read_context_from_config(config_for_policy)
         graph_knowledge = self._read_graph_knowledge_from_config(
             config_for_policy)
+        arm_knowledge = self._read_arm_knowledge_from_config(
+            config_for_policy, context)
         config_for_policy = _get_dict_of_policy_params_(
-            config_for_policy) | {'graph_knowledge': graph_knowledge}
+            config_for_policy) | {'graph_knowledge': graph_knowledge, 'arm_knowledge' : arm_knowledge}
 
         pol = None
 

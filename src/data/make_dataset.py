@@ -43,7 +43,7 @@ def _generate_synthetic_experiments_for_gk():
             global_config.REWARDS_DIR, kind, T, arms, c, unique_groups.shape[0])
         pd.DataFrame(data = reward).to_csv(reward_df_name)
         for weight in [0.2,0.5,0.8,1.0]:
-            for L in range(1,101):
+            for L in range(1,51):
                 policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
 
                 policies.extend([
@@ -54,8 +54,7 @@ def _generate_synthetic_experiments_for_gk():
                                 'weight' : weight,
                                 'groups': groups.tolist(),
                                 'only_push_arms_that_were_not_picked': opatwnp
-                            },
-                            'identifier': 'synthetic-%s-mpts-arms-%d-groups-%d-c-%.2f-T-%d-w-%.1f-correct-push-%s' %(kind, arms, unique_groups.shape[0],c,T,weight, 'some' if opatwnp else 'all')
+                            }
                     } for opatwnp in [True, False]
                 ])
                 
@@ -71,9 +70,7 @@ def _generate_synthetic_experiments_for_gk():
                                 'percentage_affected' : perc_affected,
                                 'error_kind' : error_kind,
                                 'only_push_arms_that_were_not_picked': opatwnp
-                            },
-                            'identifier': 'synthetic-%s-mpts-arms-%d-groups-%d-c-%.2f-T-%d-w-%.1f-incorrect-%.2f-%s-push-%s' %(
-                                kind, arms, unique_groups.shape[0],c,T,weight, perc_affected, error_kind, 'some' if opatwnp else 'all')
+                            }
                         }
                     )
                 policies.extend(error_gk_policies)
@@ -91,19 +88,69 @@ def _generate_synthetic_experiments_for_gk():
                     yaml.dump(config, outfile, default_flow_style=False)
                     
 
-def _generate_synthetic_experiments_for_push():
-    for c, T, kind in product([0.1,0.2,0.3,0.5], [10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
+def _generate_synthetic_experiments_for_static_push():
+    for T, dist in product([10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):        
         reward = np.zeros(shape=(T,arms))
 
-        mus = rnd.uniform(0, 1-c, arms)
+        mus = -np.sort(-rnd.uniform(0, 1, arms))
 
-        if kind == 'bern':
+        if dist == 'bern':
+            reward = rnd.binomial(1, mus, (T, arms))
+        else:
+            if dist == 'norm-sigma-0.1':
+                sigmas = rnd.uniform(0, 0.1, arms)
+            elif dist == 'norm-sigma-0.25':
+                sigmas = rnd.uniform(0, 0.25, arms)
+            reward = np.minimum(np.maximum(0, rnd.normal(mus, sigmas, (T, arms))), 1)
+
+
+        reward_path = '%s/synthetic/synthetic_static_push_dist_%s_arms_%d_T_%d.csv' % (
+            global_config.REWARDS_DIR, dist, arms, T)
+
+        pd.DataFrame(data = reward).to_csv(reward_path)
+
+        for L in range(1,51):
+            policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
+
+            policies.extend(get_cross_validated_policies(
+                {'name': 'push-mpts', 'arm_knowledge':{'name':'synthetic-static-push'}},
+                {'push_likely_arms' : [1,3,5]}
+            ))
+            for kind in ['remove', 'random']:
+                for paff in [0.01,0.05,0.1,0.25,0.5,0.75,1.0]:
+                    policies.extend(get_cross_validated_policies(
+                        {'name': 'push-mpts', 'arm_knowledge':{'name':'synthetic-static-push-wrong', 'kind':kind, 'percentage_affected' : paff}},
+                        {
+                            'push_likely_arms' : [1,3,5]
+                        }
+                    ))
+
+            config = {
+                'policies': policies,
+                'reward_path': reward_path,
+                'seed': rnd.randint(10000),
+                'L': L,
+                'T': T,
+                'dist' : dist
+            }
+
+            with open('%s/synthetic_static_push_dist_%s_arms_%d_T_%d_L_%d.yml' % (
+                global_config.EXPERIMENT_CONFIG_DIR, dist, arms, T, L), 'w') as outfile:
+                yaml.dump(config, outfile, default_flow_style=False)
+
+def _generate_synthetic_experiments_for_push():
+    for c, T, dist in product([0.1,0.2,0.3,0.5], [10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
+        reward = np.zeros(shape=(T,arms))
+
+        mus = -np.sort(-rnd.uniform(0, 1-c, arms))
+
+        if dist == 'bern':
             reward = rnd.binomial(1, mus, (T, arms))
             reward_pushed = rnd.binomial(1, mus + c, (T, arms))
         else:
-            if kind == 'norm-sigma-0.1':
+            if dist == 'norm-sigma-0.1':
                 sigmas = rnd.uniform(0, 0.1, arms)
-            elif kind == 'norm-sigma-0.25':
+            elif dist == 'norm-sigma-0.25':
                 sigmas = rnd.uniform(0, 0.25, arms)
             reward = np.minimum(np.maximum(0, rnd.normal(mus, sigmas, (T, arms))), 1)
             reward_pushed = np.minimum(np.maximum(0, rnd.normal(mus + c, sigmas, (T, arms))), 1)
@@ -117,10 +164,10 @@ def _generate_synthetic_experiments_for_push():
             num_pushes_for_arm = context.sum(axis=1)
             for i in range(arms):
                 reward[context[:,i], i] = reward_pushed[context[:,i], i]
-            reward_path = '%s/synthetic/synthetic_push_c_%.2f_pc_%.2f_kind_%s_arms_%d_T_%d.csv' % (
-                global_config.REWARDS_DIR, c, pushes_perc, kind, arms, T)
-            context_path = '%s/context_synthetic_push_c_%.2f_pc_%.2f_kind_%s_arms_%d_T_%d.csv' % (
-                global_config.CONTEXT_DIR, c, pushes_perc, kind, arms, T)
+            reward_path = '%s/synthetic/synthetic_push_c_%.2f_pc_%.2f_dist_%s_arms_%d_T_%d.csv' % (
+                global_config.REWARDS_DIR, c, pushes_perc, dist, arms, T)
+            context_path = '%s/context_synthetic_push_c_%.2f_pc_%.2f_dist_%s_arms_%d_T_%d.csv' % (
+                global_config.CONTEXT_DIR, c, pushes_perc, dist, arms, T)
 
             pd.DataFrame(data = reward).to_csv(reward_path)
             pd.DataFrame(data = context).to_csv(context_path)
@@ -128,14 +175,42 @@ def _generate_synthetic_experiments_for_push():
             for L in range(1,51):
                 policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
                 for cpush in [1.01,1.03,1.05,1.1,1.2,1.25, 1.5,1.75,2.0,2.5,3,5]:
+                    policies.append(
+                        {
+                            'name': 'cpush-mpts',
+                            'context_path' : context_path,
+                            'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
+                            'push_kind' : 'multiply',
+                            'cpush': cpush,
+                            'learn_pushed' : True
+                        })
+                    policies.append(
+                        {
+                            'name': 'cpush-mpts',
+                            'context_path' : context_path,
+                            'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
+                            'push_kind' : 'multiply',
+                            'cpush': cpush,
+                            'learn_pushed' : False
+                        })
+
+                for cpush in [1,2,3,4,5]:
                     policies.append({
                             'name': 'cpush-mpts',
                             'context_path' : context_path,
-                            'kind_knowledge' : 'syn',
-                            'identifier': 'c%.2f-s-push-%s-mpts-arms-%d-c-%.2f-pc-%.2f-T-%d-no_learning_for_pushed_arms' %(
-                                cpush, kind, arms, c, pushes_perc, T),
+                            'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
+                            'push_kind' : 'plus',
+                            'learn_pushed' : True,
                             'cpush': cpush})
 
+                    policies.append({
+                            'name': 'cpush-mpts',
+                            'context_path' : context_path,
+                            'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
+                            'push_kind' : 'plus',
+                            'learn_pushed' : False,
+                            'cpush': cpush})
+                    
                 config = {
                     'policies': policies,
                     'reward_path': reward_path,
@@ -143,14 +218,15 @@ def _generate_synthetic_experiments_for_push():
                     'L': L,
                     'c': c,
                     'pc': pushes_perc,
-                    'T': T
+                    'T': T,
+                    'dist' : dist
                 }
 
-                with open('%s/synthetic_push_multiply_%s_c_%.2f_pc_%.2f_arms_%d_T_%d_L_%d.yml' % (
-                    global_config.EXPERIMENT_CONFIG_DIR, kind, c, pushes_perc, arms, T, L), 'w') as outfile:
+                with open('%s/synthetic_static_push_dist_%s_c_%.2f_pc_%.2f_arms_%d_T_%d_L_%d.yml' % (
+                    global_config.EXPERIMENT_CONFIG_DIR, dist, c, pushes_perc, arms, T, L), 'w') as outfile:
                     yaml.dump(config, outfile, default_flow_style=False)                    
 
-def clean_metrics_data(metrics_dir: str, start: str, end: str, normalize=True):
+def clean_metrics_data(metrics_dir: str, start: str, end: str, normalize:bool =True):
     """Cleans the metrics csv files by removing the rows that don't lie within
     the time window specified by start and end. Further linear interpolation is
     used to fill missing values. Writes them to the data/interim directory.
@@ -174,6 +250,7 @@ def _clean_metrics_data_for_csv_file(current_path: str, metrics_dir: str,
                                      start: str, end: str, normalize: bool):
     metrics_df = pd.read_csv(current_path)
     metrics_df['now'] = pd.to_datetime(metrics_df['now'])
+    
     metrics_df = metrics_df.loc[(
         metrics_df.now >= start) & (metrics_df.now <= end), ]
 
@@ -224,13 +301,13 @@ def _clean_metrics():
     clean_metrics_data(
         '%s/raw/sequential_data/metrics/' % global_config.DATA_DIR,
         '2019-11-19 18:38:39 CEST',
-        '2019-11-20 02:30:00 CEST'
+        '2019-11-20 02:30:00 CEST',
     )
-    clean_metrics_data(
-        '%s/raw/concurrent_data/metrics/' % global_config.DATA_DIR,
-        '2019-11-25 16:12:13 CEST',
-        '2019-11-25 20:45:00 CEST'
-    )
+    # clean_metrics_data(
+    #     '%s/raw/concurrent_data/metrics/' % global_config.DATA_DIR,
+    #     '2019-11-25 16:12:13 CEST',
+    #     '2019-11-25 20:45:00 CEST'
+    # )
 
 
 def _generate_rewards():
@@ -375,43 +452,29 @@ def _write_experiment_config_to_disk(config: dict, name: str):
     with open('%s/%s.yml' % (global_config.EXPERIMENT_CONFIG_DIR, name), 'w') as yml_file:
         yaml.dump(config, yml_file, default_flow_style=False)
 
-def _generate_mpts_parameter_optimization():
-    policies = []
-    policies.extend(get_cross_validated_policies(
-        {'name': 'push-mpts'},
-        {
-            'push_likely_arms': [0,5,10],
-            'push_temporal_correlated_arms': [0,5,10],
-            'push_unlikely_arms': [0,5,10]
-        }))
-
-    _write_configs_for_policies(policies, name='mpts_parameter_tuning')
-
-def _generate_egreedy_parameter_optimization():
-    policies = []
+def _generate_push_mpts():
+    policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
 
     policies.extend(get_cross_validated_policies(
-        {'name': 'cdkegreedy'},
+        {'name': 'push-mpts', 'arm_knowledge' : {'name' : 'correct'}},
         {
-            'epsilon' : [0.0,0.1],
-            'init_ev_likely_arms': [0.8,1.0],
-            'init_ev_temporal_correlated_arms': [0.8,1.0],
-            'init_ev_unlikely_arms': [0.0,0.5],
+            'push_likely_arms': [1,3,5,10],
+            'push_temporal_correlated_arms': [1,3,5,10]
         }))
 
-    _write_configs_for_policies(policies, name='mpts_parameter_tuning')
+    _write_configs_for_policies(policies, name='push_mpts')
 
 def _generate_mpts():
     policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
 
-    # policies.extend(
-    #     get_cross_validated_policies(
-    #         {'name': 'mpts'},
-    #         {
-    #             'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES
-    #         }
-    #     )
-    # )
+    policies.extend(
+        get_cross_validated_policies(
+            {'name': 'mpts'},
+            {
+                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES
+            }
+        )
+    )
     
     # policies.extend(
     #     get_cross_validated_policies(
@@ -423,18 +486,8 @@ def _generate_mpts():
     #         }
     #     )
     # )
-
-    policies.extend(
-        get_cross_validated_policies(
-            {'name': 'push-mpts'},
-            {
-                'push_unlikely_arms': [0,5,10],
-                'push_temporal_correlated_arms': [0,1,5,10]
-            }
-        )
-    )
     
-    _write_configs_for_policies(policies, name='mpts_static_push_smaller_window_size')
+    _write_configs_for_policies(policies, name='mpts')
 
 def _generate_cb():
     policies = [{'name' : 'mpts', 'identifier' : 'baseline'}, {'name': 'random'}]
@@ -488,19 +541,35 @@ def _generate_cpush_mpts():
                 'name': 'cpush-mpts',
                 'context_path':
                 global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
-                'push_likely_arms': 0,
-                'push_unlikely_arms': 0,
-                'push_temporal_correlated_arms': 0
+                'push_kind' : 'plus',
+                'learn_pushed': True,
+                'arm_knowledge' : {'name':'push', 'one_active_host_sufficient_for_push': True}
             },
             {
-
-                'one_active_host_sufficient_for_push': [True, False],
-                'cpush': [1.1, 1.25, 1.5, 2.0, 3, 5]
+                'cpush': [1, 3, 5]
             }
         )
     )
 
-    _write_configs_for_policies(policies, name='cpush_mpts_no_learning_for_pushed_arms_multiply')
+    policies.extend(
+        get_cross_validated_policies(
+            {
+                'name': 'cpush-mpts',
+                'context_path':
+                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
+                'push_likely_arms': 0,
+                'push_temporal_correlated_arms': 0,
+                'push_kind' : 'plus',
+                'learn_pushed': True,
+                'arm_knowledge' : {'name':'push', 'one_active_host_sufficient_for_push': False}
+            },
+            {
+                'cpush': [1, 3, 5]
+            }
+        )
+    )
+
+    _write_configs_for_policies(policies, name='cpush_mpts_plus')
 
 def _generate_sim_cpush_mpts():
     policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
@@ -513,31 +582,44 @@ def _generate_sim_cpush_mpts():
                 global_config.DATA_DIR + '/processed/context/%s_context_sim_w%d_s%d.csv',
                 'push_likely_arms': 0,
                 'push_temporal_correlated_arms': 0,
-                'kind_knowledge': 'sim'
+                'kind_knowledge': 'sim',
+                'push_kind' : 'plus',
+                'learn_pushed' : True,
+                'arm_knowledge' : {'name': 'sim'}
             },
             {
-                'graph_knowledge' : [{'name' : 'correct', 'weight' : 1.0}, None],                
                 'threshold' : [1000, 100, 10, 50],
-                'cpush': [1,3,5],
-                'push_unlikely_arms': [0,10]
+                'cpush': [1,3,5]
             }
         )
     )
 
-    _write_configs_for_policies(policies, name='sim_cpush')    
+    _write_configs_for_policies(policies, name='sim_cpush_plus')    
 
+
+def _generate_exclude_certain_arms_test():
+    policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
+
+    policies.append(
+        {
+            'name' : 'push-mpts',
+            'arm_knowledge' : {'name': 'correct'}
+        }
+    )
+    _write_configs_for_policies(policies, name='push_mpts_exclude')
 
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
 
     _generate_mpts()
-    # _generate_sim_cpush_mpts()
-    # _generate_cpush_mpts()
+    _generate_sim_cpush_mpts()
+    _generate_cpush_mpts()
     # _generate_cb()
-    # _generate_synthetic_experiments_for_gk()
-    # _generate_synthetic_experiments_for_push()
-
+    _generate_synthetic_experiments_for_gk()
+    _generate_synthetic_experiments_for_static_push()
+    _generate_synthetic_experiments_for_push()
+    _generate_push_mpts()
 
 
 def _write_config_for_params(

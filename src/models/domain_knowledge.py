@@ -69,7 +69,6 @@ def get_adjacency_matrix_from_groups(groups, weight):
 class Knowledge:
     pass
 
-
 class GraphKnowledge:
     weight: float
     edges: np.ndarray
@@ -91,23 +90,38 @@ class GraphKnowledge:
         """If set only the unpicked arms infer knowledge within the group."""
         return self._only_push_arms_that_were_not_picked
 
-class ArmKnowledge(Knowledge):
-    """Contains information about metrics and hosts for the arms."""
-
-    arm: np.ndarray
-    hosts_for_arm: np.ndarray
-    is_control_host_for_arm: np.ndarray
-    hosts_active_for_arm: np.ndarray
-    metrics_for_arm: np.ndarray
-    arm_lays_on_same_host: np.ndarray
-    arm_lays_on_control_host: np.ndarray
-    arm_lays_on_different_compute_hosts: np.ndarray
-    arm_lays_on_same_compute_host: np.ndarray
+class StaticPushArmKnowledge:
     arm_has_temporal_correlation: np.ndarray
+    arm_likely: np.ndarray
     indicies_of_arms_that_will_not_be_explored: np.ndarray
     indicies_of_arms_that_will_be_explored: np.ndarray
-    arm_relevant_for_sliding_window: np.ndarray
+    
+    @property
+    def arm_has_temporal_correlation(self) -> np.ndarray:
+        return self._arm_has_temporal_correlation
 
+    @property
+    def arm_likely(self) -> np.ndarray:
+        return self._arm_likely
+
+    @property
+    def indicies_of_arms_that_will_not_be_explored(self) -> np.ndarray:
+        """Indicies of uninteresting arms, that contain constant metrics.
+        """
+        return self._indicies_of_arms_that_will_not_be_explored
+
+    @property
+    def indicies_of_arms_that_will_be_explored(self) -> np.ndarray:
+        """Indicies of arms without the indicies of arms that will not be
+        explored"""
+        return self._indicies_of_arms_that_will_be_explored
+
+
+class ArmKnowledge(Knowledge, StaticPushArmKnowledge):
+    """Contains information about metrics and hosts for the arms."""
+
+    arm_relevant_for_sliding_window: np.ndarray
+    
     def __init__(self, arms: np.ndarray, control_host: str = 'wally113'):
         self._K = len(arms)
         self._arms = arms
@@ -159,88 +173,18 @@ class ArmKnowledge(Knowledge):
 
         self._arm_relevant_for_sliding_window = np.isin(self._metrics_for_arm, 'load.min').all(axis=1)
 
-    @property
-    def arm(self) -> np.ndarray:
-        """Return name of arms"""
-        return self._arms
-
-    @property
-    def hosts_for_arm(self) -> np.ndarray:
-        """Hosts for each arm"""
-        return self._hosts_for_arm
-
-    @property
-    def hosts_active_for_arm(self) -> np.ndarray:
-        """If hosts of the arms are active"""
-        return self._hosts_active_for_arm
-
-    @property
-    def is_control_host_for_arm(self) -> np.ndarray:
-        """If host is control host"""
-        return self._is_control_host_for_arm
-
-    @property
-    def metrics_for_arm(self) -> np.ndarray:
-        """Metrics for each arm"""
-        return self._metrics_for_arm
-
-    @property
-    def arm_lays_on_same_host(self) -> np.ndarray:
-        """If the arms lay on the same host, meaning if for each arm the
-        metrics belong to the same host."""
-        return self._arm_lays_on_same_host
-
-    @property
-    def arm_lays_on_control_host(self) -> np.ndarray:
-        """If the arms lay on the control host, meaning if atleast one of the
-        metrics belongs to the control host."""
-        return self._arm_lays_on_control_host
-
-    @property
-    def arm_lays_on_different_compute_hosts(self) -> np.ndarray:
-        """If the arms lay on different compute hosts, meaning one of the
-        metrics belongs to one compute host and the other one to another
-        compute host.
-        """
-        return self._arm_lays_on_different_compute_hosts
-
-    @property
-    def arm_lays_on_same_compute_host(self) -> np.ndarray:
-        """If the arms lay on the same compute hosts, meaning both memtrics
-        belong to the same compute host."""
-        return self._arm_lays_on_same_compute_host
-
-    @property
-    def arm_has_temporal_correlation(self) -> np.ndarray:
-        """Some arms are correlated through time, e.g. 
-        wally113.load.min1-wally113.load.min5. Returns bool array that indicate
-        if temporal correlation exists for this arm.
-        """
-        return self._arm_has_temporal_correlation
-
-    @property
-    def indicies_of_arms_that_will_not_be_explored(self) -> np.ndarray:
-        """Indicies of uninteresting arms, that contain constant metrics.
-        """
-        return self._indicies_of_arms_that_will_not_be_explored
-
-    @property
-    def indicies_of_arms_that_will_be_explored(self) -> np.ndarray:
-        """Indicies of arms without the indicies of arms that will not be
-        explored"""
-        return self._indicies_of_arms_that_will_be_explored
+        self._arm_likely = np.logical_or(self._arm_lays_on_same_host,self._arm_lays_on_control_host)
 
     @property
     def arm_relevant_for_sliding_window(self):
         return self._arm_relevant_for_sliding_window    
 
-class DynamicArmKnowledge(ArmKnowledge):
+class ActiveHostKnowledge(ArmKnowledge):
     """Base class for domain knowledge that can change dynamically."""
 
     def __init__(self, arms: np.ndarray, control_host: str = 'wally113'):
         super().__init__(arms, control_host)
-        self._active_hosts = set(
-            ['wally113', 'wally117', 'wally122', 'wally123', 'wally124'])
+        self._active_hosts = set([])
 
     def recompute_properties(self):
         """Add recomputation for properties that change dynamically in child
@@ -255,40 +199,44 @@ class DynamicArmKnowledge(ArmKnowledge):
             self.recompute_properties()
             self._active_hosts = set(active_hosts)
 
+
+class DynamicPushKnowledge:
+    arms_eligible_for_push: np.ndarray
+
+    def compute_arms_eligible_for_push(self, context):
+        pass
     
-class PushArmKnowledge(DynamicArmKnowledge):
+    @property
+    def arms_eligible_for_push(self) -> np.ndarray:
+        """Returns for each arm whether or not it is eligible for a push."""
+        return self._arms_eligible_for_push
+            
+class PushArmKnowledge(ActiveHostKnowledge, DynamicPushKnowledge):
     """Arms are eligible for a push if either one or both of its hosts are
     active.
     """
-
-    arms_eligible_for_push: np.ndarray
-
-    def __init__(self, arms: np.ndarray,
+    def __init__(self, arms: np.ndarray, context_columns,
                  one_active_host_sufficient_for_push: bool = True,
                  control_host: str = 'wally113'
                  ):
         super().__init__(arms, control_host)
+        self._context_columns = context_columns
         self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
         self._interesting_metrics = np.isin(self._metrics_for_arm, ['cpu.user', 'mem.used', 'load.min1', 'load.min5', 'load.min15']).all(axis=1)
-        self._arms_eligible_for_push = self._compute_arms_eligible_for_push()
+        self._arms_eligible_for_push = np.zeros(self._K, dtype=bool)
 
-    def _compute_arms_eligible_for_push(self):
+    def compute_arms_eligible_for_push(self, context):
+        self.update_active_hosts(self._context_columns[context > 0])
         if self._one_active_host_sufficient_for_push:
             return np.logical_and(self._hosts_active_for_arm.any(axis=1), self._interesting_metrics)
         else:
             return np.logical_and(self._hosts_active_for_arm.all(axis=1), self._interesting_metrics)                                           
 
-    def recompute_properties(self):
-        self._arms_eligible_for_push = self._compute_arms_eligible_for_push()
-
     @property
-    def arms_eligible_for_push(self) -> np.ndarray:
-        """Returns for each arm whether or not it is eligible for a push."""
-        return self._arms_eligible_for_push
-
-
-class SimiliarPushArmKnowledge(DynamicArmKnowledge):
-    arms_eligible_for_push: np.ndarray
+    def arm_likely(self) -> np.ndarray:
+        return
+    
+class SimiliarPushArmKnowledge(ActiveHostKnowledge, DynamicPushKnowledge):
     threshold : int
     
     def __init__(self, arms, threshold, columns, control_host='wally113'):
@@ -299,7 +247,7 @@ class SimiliarPushArmKnowledge(DynamicArmKnowledge):
         
         self._arms_eligible_for_push = np.zeros(self._K, dtype=bool)
 
-    def _compute_arms_eligible_for_push(self, similiary):
+    def compute_arms_eligible_for_push(self, similiary):
         self._arms_eligible_for_push = self._matrix[:, similiary < self._threshold].any(axis=1)
 
     def _compute_push_matrix(self):
@@ -327,42 +275,22 @@ class SimiliarPushArmKnowledge(DynamicArmKnowledge):
                 )                    
 
             
-    def compute_arms_eligible_for_push(similiarity: List[float]):
-        self._arms_eligible_for_push = self._matrix[:, similiarity < threshold].any(axis=1)
+    def compute_arms_eligible_for_push(self, similiarity: List[float]):
+        self._arms_eligible_for_push = self._matrix[:, similiarity < self._threshold].any(axis=1)
 
     @property
     def threshold(self) -> int:
         return self._threshold
         
-    @property
-    def arms_eligible_for_push(self) -> np.ndarray:
-        """Returns for each arm whether or not it is eligible for a push."""
-        return self._arms_eligible_for_push
-
-class SyntheticPushArmKnowledge:
-
-    arms_eligible_for_push : np.ndarray
-    indicies_of_arms_that_will_not_be_explored : np.ndarray
-    
+class SyntheticPushArmKnowledge(DynamicPushKnowledge, StaticPushArmKnowledge):
     def __init__(self, arms: np.ndarray):
         self._arms_eligible_for_push = np.zeros(len(arms), dtype=bool)
         self._indicies_of_arms_that_will_not_be_explored = np.array([], dtype=int)
 
     def compute_arms_eligible_for_push(self, context : np.ndarray):
         self._arms_eligible_for_push = context > 0
-
-    @property
-    def arms_eligible_for_push(self) -> np.ndarray:
-        """Returns for each arm whether or not it is eligible for a push."""
-        return self._arms_eligible_for_push        
-
-    @property
-    def indicies_of_arms_that_will_not_be_explored(self) -> np.ndarray:
-        """Indicies of uninteresting arms, that contain constant metrics.
-        """
-        return self._indicies_of_arms_that_will_not_be_explored
         
-class GraphArmKnowledge(DynamicArmKnowledge, GraphKnowledge):
+class GraphArmKnowledge(ActiveHostKnowledge, GraphKnowledge):
     """Contains the neighbors for each arm. Arms are neighbors if they are
     in the same group. Groups are defined based on the type of host (control,
     compute), the metric and the state of the host.
@@ -447,10 +375,6 @@ class GraphArmKnowledge(DynamicArmKnowledge, GraphKnowledge):
 
         return group_of_arms
 
-    @property
-    def name(self):
-        only_not_picked = '-only_not_picked_arms' if self._only_push_arms_that_were_not_picked else ''        
-        return '%.1f-correct-gk%s' % (self._weight, only_not_picked)
 
 class SyntheticGraphArmKnowledge(GraphKnowledge):
     edges: np.ndarray
@@ -462,11 +386,6 @@ class SyntheticGraphArmKnowledge(GraphKnowledge):
         self._groups = np.array(groups)
         self._edges = get_adjacency_matrix_from_groups(groups, self._weight)
         self._only_push_arms_that_were_not_picked = only_push_arms_that_were_not_picked
-
-    @property
-    def name(self):
-        only_not_picked = '-only_not_picked_arms' if self._only_push_arms_that_were_not_picked else ''
-        return '%.1f-correct-synthetic%s' % (self._weight, only_not_picked)
 
 class WrongSyntheticGraphArmKnowledge(SyntheticGraphArmKnowledge):
     def __init__(self, arms: np.ndarray, groups: np.ndarray, error_kind: str, percentage_affected: float, weight: float=0.5, only_push_arms_that_were_not_picked: bool = True, seed=0):
@@ -499,9 +418,7 @@ class WrongSyntheticGraphArmKnowledge(SyntheticGraphArmKnowledge):
         self._groups[indicies_of_affected] = self._rnd.choice(self._unique_groups, no_affected)
         self._edges = get_adjacency_matrix_from_groups(self._groups, self._weight)
 
-    @property
-    def name(self):
-        return '%.2f-%s-wrong-synthetic-dk' % (self._percentage_affected, self._error_kind)
+
         
 class WrongGraphArmknowledge(GraphArmKnowledge):
 
@@ -566,11 +483,6 @@ class WrongGraphArmknowledge(GraphArmKnowledge):
         self._edges[ind] = np.logical_not(self._edges[ind])
         self._edges = self._edges.reshape(self._K, self._K)
 
-    @property
-    def name(self):
-        return '%.1f-wrong-gk-%s-%d' % (self._weight, self._kind, self._n_affected)
-
-
 class RandomGraphKnowledge(Knowledge):
 
     edges: np.ndarray
@@ -608,3 +520,27 @@ class RandomGraphKnowledge(Knowledge):
         """Adjacency matrix of size self._K x self._K that describes
         neighborhod for arms."""
         return self._edges
+
+class SyntheticStaticPushKnowledge(StaticPushArmKnowledge):
+
+    def __init__(self):
+        self._arm_likely = np.zeros(100, dtype=bool)
+        self._arm_likely[0:30] = True
+        self._indicies_of_arms_that_will_not_be_explored = []
+        self._indicies_of_arms_that_will_be_explored = np.arange(100)
+        self._arm_has_temporal_correlation = np.zeros(100, dtype=bool)
+
+
+class WrongSyntheticStaticPushKnowledge(SyntheticStaticPushKnowledge):
+
+    def __init__(self, kind='remove', percentage_affected=0.1, random_seed = 0):
+        super().__init__()
+        self._rnd = np.random.RandomState(random_seed)
+        if kind == 'remove':
+            number_of_removals = int(30 * percentage_affected)
+            self._arm_likely[self._rnd.choice(np.arange(30), number_of_removals, replace=False)] = False
+        elif kind == 'random':
+            number_of_random_initialisation = int(100 * percentage_affected)
+            self._arm_likely[self._rnd.choice(np.arange(100), number_of_random_initialisation, replace=False)] = self._rnd.choice([True, False], number_of_random_initialisation)
+            
+        
