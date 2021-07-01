@@ -222,7 +222,7 @@ def _generate_synthetic_experiments_for_push():
                     'dist' : dist
                 }
 
-                with open('%s/synthetic_static_push_dist_%s_c_%.2f_pc_%.2f_arms_%d_T_%d_L_%d.yml' % (
+                with open('%s/synthetic_push_dist_%s_c_%.2f_pc_%.2f_arms_%d_T_%d_L_%d.yml' % (
                     global_config.EXPERIMENT_CONFIG_DIR, dist, c, pushes_perc, arms, T, L), 'w') as outfile:
                     yaml.dump(config, outfile, default_flow_style=False)                    
 
