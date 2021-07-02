@@ -228,9 +228,9 @@ class PushArmKnowledge(ActiveHostKnowledge, DynamicPushKnowledge):
     def compute_arms_eligible_for_push(self, context):
         self.update_active_hosts(self._context_columns[context > 0])
         if self._one_active_host_sufficient_for_push:
-            return np.logical_and(self._hosts_active_for_arm.any(axis=1), self._interesting_metrics)
+            return np.logical_not(np.logical_and(self._hosts_active_for_arm.any(axis=1), self._interesting_metrics))
         else:
-            return np.logical_and(self._hosts_active_for_arm.all(axis=1), self._interesting_metrics)                                           
+            return np.logical_not(np.logical_and(self._hosts_active_for_arm.all(axis=1), self._interesting_metrics))                                           
 
     @property
     def arm_likely(self) -> np.ndarray:
