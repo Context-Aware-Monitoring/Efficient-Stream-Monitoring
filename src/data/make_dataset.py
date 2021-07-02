@@ -542,10 +542,11 @@ def _generate_cpush_mpts():
                 'context_path':
                 global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
                 'push_kind' : 'plus',
-                'learn_pushed': True,
+
                 'arm_knowledge' : {'name':'push', 'one_active_host_sufficient_for_push': True}
             },
             {
+                'learn_pushed': [True, False],
                 'cpush': [1, 3, 5]
             }
         )
@@ -560,16 +561,50 @@ def _generate_cpush_mpts():
                 'push_likely_arms': 0,
                 'push_temporal_correlated_arms': 0,
                 'push_kind' : 'plus',
-                'learn_pushed': True,
                 'arm_knowledge' : {'name':'push', 'one_active_host_sufficient_for_push': False}
             },
             {
+                'learn_pushed': [True, False],                
                 'cpush': [1, 3, 5]
             }
         )
     )
 
-    _write_configs_for_policies(policies, name='cpush_mpts_plus')
+    policies.extend(
+        get_cross_validated_policies(
+            {
+                'name': 'cpush-mpts',
+                'context_path':
+                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
+                'push_kind' : 'multiply',
+
+                'arm_knowledge' : {'name':'push', 'one_active_host_sufficient_for_push': True}
+            },
+            {
+                'learn_pushed': [True, False],
+                'cpush': [1.25, 1.5, 2, 3]
+            }
+        )
+    )
+
+    policies.extend(
+        get_cross_validated_policies(
+            {
+                'name': 'cpush-mpts',
+                'context_path':
+                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
+                'push_kind' : 'multiply',
+
+                'arm_knowledge' : {'name':'push', 'one_active_host_sufficient_for_push': False}
+            },
+            {
+                'learn_pushed': [True, False],
+                'cpush': [1.25, 1.5, 2, 3]
+            }
+        )
+    )    
+
+    _write_configs_for_policies(policies, name='cpush_mpts')
 
 def _generate_sim_cpush_mpts():
     policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
@@ -614,7 +649,7 @@ def _generate_experiment_configs():
 
     # _generate_mpts()
     _generate_sim_cpush_mpts()
-    _generate_cpush_mpts()
+    # _generate_cpush_mpts()
     # _generate_cb()
     # _generate_synthetic_experiments_for_gk()
     # _generate_synthetic_experiments_for_static_push()
