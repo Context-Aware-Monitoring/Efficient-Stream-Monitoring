@@ -641,15 +641,15 @@ def _generate_exclude_certain_arms_test():
             'arm_knowledge' : {'name': 'correct'}
         }
     )
-    _write_configs_for_policies(policies, name='push_mpts_exclude')
+    _write_configs_for_policies(policies, name='cpush_posterior')
 
 def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
 
     # _generate_mpts()
-    _generate_sim_cpush_mpts()
-    # _generate_cpush_mpts()
+    # _generate_sim_cpush_mpts()
+    _generate_cpush_mpts()
     # _generate_cb()
     # _generate_synthetic_experiments_for_gk()
     # _generate_synthetic_experiments_for_static_push()
