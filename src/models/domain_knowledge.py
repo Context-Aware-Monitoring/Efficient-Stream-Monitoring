@@ -228,7 +228,7 @@ class PushArmKnowledge(ActiveHostKnowledge, DynamicPushKnowledge):
         super().__init__(arms, control_host)
         self._context_columns = context_columns
         self._one_active_host_sufficient_for_push = one_active_host_sufficient_for_push
-        self._interesting_metrics = np.isin(self._metrics_for_arm, ['cpu.user', 'mem.used', 'load.min1', 'load.min5', 'load.min15']).all(axis=1)
+        self._interesting_metrics = np.isin(self._metrics_for_arm, ['cpu.user', 'mem.used']).all(axis=1)
         self._arms_eligible_for_push = np.zeros(self._K, dtype=bool)
 
     def compute_arms_eligible_for_push(self, context):
