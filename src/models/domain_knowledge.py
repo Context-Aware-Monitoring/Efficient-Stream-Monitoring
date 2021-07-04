@@ -232,12 +232,12 @@ class PushArmKnowledge(ActiveHostKnowledge, DynamicPushKnowledge):
         self._arms_eligible_for_push = np.zeros(self._K, dtype=bool)
 
     def compute_arms_eligible_for_push(self, context):
-        if context[0] > 3000 and (context[1,2,3,4] == 0).all():
+        if context[0] > 3000 and (context[[1,2,3,4]] == 0).all():
             return np.logical_and(
                 (self._hosts_for_arm == 'wally113').all(axis=1),
                 self._interesting_metrics
             )
-        elif (context[1,2] > 10).all() and (context[3,4] == 0).all():
+        elif (context[[1,2]] > 10).all() and (context[[3,4]] == 0).all():
             return np.logical_and(
                 np.isin(self._hosts_for_arm, ['wally113', 'wally122', 'wally124']),
                 self._interesting_metrics
