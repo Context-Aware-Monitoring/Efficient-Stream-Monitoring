@@ -463,11 +463,12 @@ class CPushMpts(PushMPTS):
         self._push_received_this_iteration[arm_gets_pushed] = True
 
         if self._push_kind == 'plus':
-            beta_pushed = np.where(arm_gets_pushed, self._beta + self._cpush, self._beta)
+            alpha_pushed = np.where(arm_gets_pushed, self._alpha + self._cpush, self._beta)
         else:
-            beta_pushed = np.where(arm_gets_pushed, self._beta * self._cpush, self._beta)
+            alpha_pushed = np.where(arm_gets_pushed, self._alpha * self._cpush, self._beta)
+            
         theta = self._rnd.beta(np.maximum(
-            1.0, self._alpha), np.maximum(1.0, beta_pushed))
+            1.0, alpha_pushed), np.maximum(1.0, self._beta))
 
         return np.argsort(theta)[-self._L:]
 

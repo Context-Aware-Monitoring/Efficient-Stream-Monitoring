@@ -21,7 +21,7 @@ def flatten(d, parent_key='', sep='_'):
 
 def collect_yaml_config(config):
     df = pd.DataFrame()
-    keys = list(filter(lambda key: key not in ['policies', 'reward_path', 'seed'], config.keys()))
+    keys = list(filter(lambda key: key not in ['policies', 'seed'], config.keys()))
     global_setting = {key:config[key] for key in keys}
 
     baseline_regret = 0
@@ -37,7 +37,10 @@ def collect_yaml_config(config):
             regret = flat_dict['regret']
             del flat_dict['regret']
 
-            flat_dict['improvement'] = baseline_regret / regret
+            if regret != 0.0:
+                flat_dict['improvement'] = baseline_regret / regret
+            else:
+                flat_dict['improvement'] = 0
             df = df.append(flat_dict | global_setting, ignore_index=True)
 
     return df

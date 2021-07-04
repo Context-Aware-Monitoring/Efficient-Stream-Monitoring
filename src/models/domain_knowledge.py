@@ -93,6 +93,7 @@ class GraphKnowledge:
 class StaticPushArmKnowledge:
     arm_has_temporal_correlation: np.ndarray
     arm_likely: np.ndarray
+    arm_unlikely: np.ndarray
     indicies_of_arms_that_will_not_be_explored: np.ndarray
     indicies_of_arms_that_will_be_explored: np.ndarray
     
@@ -103,6 +104,10 @@ class StaticPushArmKnowledge:
     @property
     def arm_likely(self) -> np.ndarray:
         return self._arm_likely
+
+    @property
+    def arm_unlikely(self) -> np.ndarray:
+        return np.logical_not(self._arm_likely)
 
     @property
     def indicies_of_arms_that_will_not_be_explored(self) -> np.ndarray:
@@ -191,7 +196,8 @@ class ActiveHostKnowledge(ArmKnowledge):
         class."""
         pass
 
-    def update_active_hosts(self, active_hosts: np.ndarray):
+    def update_active_hosts(self, context_row):
+        breakpoint()
         if self._active_hosts != set(active_hosts):
             self._hosts_active_for_arm = np.isin(
                 self._hosts_for_arm, active_hosts
@@ -226,11 +232,23 @@ class PushArmKnowledge(ActiveHostKnowledge, DynamicPushKnowledge):
         self._arms_eligible_for_push = np.zeros(self._K, dtype=bool)
 
     def compute_arms_eligible_for_push(self, context):
-        self.update_active_hosts(self._context_columns[context > 0])
-        if self._one_active_host_sufficient_for_push:
-            return np.logical_not(np.logical_and(self._hosts_active_for_arm.any(axis=1), self._interesting_metrics))
-        else:
-            return np.logical_not(np.logical_and(self._hosts_active_for_arm.all(axis=1), self._interesting_metrics))                                           
+        if context[0] > 3000 and (context[1,2,3,4] == 0).all():
+            return np.logical_and(
+                (self._hosts_for_arm == 'wally113').all(axis=1),
+                self._interesting_metrics
+            )
+        elif (context[1,2] > 10).all() and (context[3,4] == 0).all():
+            return np.logical_and(
+                np.isin(self._hosts_for_arm, ['wally113', 'wally122', 'wally124']),
+                self._interesting_metrics
+            )
+        
+        return np.zeros(self._K, dtype=bool)
+        # self.update_active_hosts(self._context_columns[context > 0])
+        # if self._one_active_host_sufficient_for_push:
+        #     return np.logical_not(np.logical_and(self._hosts_active_for_arm.any(axis=1), self._interesting_metrics))
+        # else:
+        #     return np.logical_not(np.logical_and(self._hosts_active_for_arm.all(axis=1), self._interesting_metrics))                                           
 
     @property
     def arm_likely(self) -> np.ndarray:

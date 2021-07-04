@@ -114,14 +114,15 @@ def _generate_synthetic_experiments_for_static_push():
 
             policies.extend(get_cross_validated_policies(
                 {'name': 'push-mpts', 'arm_knowledge':{'name':'synthetic-static-push'}},
-                {'push_likely_arms' : [1,3,5]}
+                {'push_likely_arms' : [0,1,3,5], 'push_unlikely_arms': [0,1,3,5]}
             ))
             for kind in ['remove', 'random']:
                 for paff in [0.01,0.05,0.1,0.25,0.5,0.75,1.0]:
                     policies.extend(get_cross_validated_policies(
                         {'name': 'push-mpts', 'arm_knowledge':{'name':'synthetic-static-push-wrong', 'kind':kind, 'percentage_affected' : paff}},
                         {
-                            'push_likely_arms' : [1,3,5]
+                            'push_likely_arms' : [0,1,3,5],
+                            'push_unlikely_arms' : [0,1,3,5]
                         }
                     ))
 
@@ -543,7 +544,7 @@ def _generate_cpush_mpts():
                 global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
                 'push_kind' : 'plus',
 
-                'arm_knowledge' : {'name':'push', 'one_active_host_sufficient_for_push': True}
+                'arm_knowledge' : {'name':'push'}
             },
             {
                 'learn_pushed': [True, False],
@@ -558,27 +559,9 @@ def _generate_cpush_mpts():
                 'name': 'cpush-mpts',
                 'context_path':
                 global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
-                'push_likely_arms': 0,
-                'push_temporal_correlated_arms': 0,
-                'push_kind' : 'plus',
-                'arm_knowledge' : {'name':'push', 'one_active_host_sufficient_for_push': False}
-            },
-            {
-                'learn_pushed': [True, False],                
-                'cpush': [1, 3, 5]
-            }
-        )
-    )
-
-    policies.extend(
-        get_cross_validated_policies(
-            {
-                'name': 'cpush-mpts',
-                'context_path':
-                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
                 'push_kind' : 'multiply',
 
-                'arm_knowledge' : {'name':'push', 'one_active_host_sufficient_for_push': True}
+                'arm_knowledge' : {'name':'push'}
             },
             {
                 'learn_pushed': [True, False],
@@ -587,24 +570,7 @@ def _generate_cpush_mpts():
         )
     )
 
-    policies.extend(
-        get_cross_validated_policies(
-            {
-                'name': 'cpush-mpts',
-                'context_path':
-                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
-                'push_kind' : 'multiply',
-
-                'arm_knowledge' : {'name':'push', 'one_active_host_sufficient_for_push': False}
-            },
-            {
-                'learn_pushed': [True, False],
-                'cpush': [1.25, 1.5, 2, 3]
-            }
-        )
-    )    
-
-    _write_configs_for_policies(policies, name='cpush_mpts')
+    _write_configs_for_policies(policies, name='cpush_mpts_fewer_pushes')
 
 def _generate_sim_cpush_mpts():
     policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
