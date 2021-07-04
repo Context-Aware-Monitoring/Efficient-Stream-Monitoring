@@ -548,7 +548,8 @@ def _generate_cpush_mpts():
             },
             {
                 'learn_pushed': [True, False],
-                'cpush': [1, 3, 5]
+                'cpush': [1, 3, 5],
+                'q': [10,100,1000]
             }
         )
     )
@@ -565,12 +566,13 @@ def _generate_cpush_mpts():
             },
             {
                 'learn_pushed': [True, False],
-                'cpush': [1.25, 1.5, 2, 3]
+                'cpush': [1.25, 1.5, 2, 3],
+                'q': [None, 10,100,1000]                
             }
         )
     )
 
-    _write_configs_for_policies(policies, name='cpush_mpts_fewer_pushes')
+    _write_configs_for_policies(policies, name='cpush_with_limit')
 
 def _generate_sim_cpush_mpts():
     policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
@@ -590,7 +592,7 @@ def _generate_sim_cpush_mpts():
             },
             {
                 'threshold' : [1000, 100, 10, 50],
-                'cpush': [1,3,5]
+                'cpush': [None, 1,3,5]
             }
         )
     )
