@@ -239,7 +239,7 @@ class PushArmKnowledge(ActiveHostKnowledge, DynamicPushKnowledge):
             )
         elif (context[[1,2]] > 10).all() and (context[[3,4]] == 0).all():
             return np.logical_and(
-                np.isin(self._hosts_for_arm, ['wally113', 'wally122', 'wally124']),
+                np.isin(self._hosts_for_arm, ['wally113', 'wally122', 'wally124']).all(axis=1),
                 self._interesting_metrics
             )
         
