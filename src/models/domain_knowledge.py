@@ -197,7 +197,6 @@ class ActiveHostKnowledge(ArmKnowledge):
         pass
 
     def update_active_hosts(self, context_row):
-        breakpoint()
         if self._active_hosts != set(active_hosts):
             self._hosts_active_for_arm = np.isin(
                 self._hosts_for_arm, active_hosts
@@ -233,7 +232,6 @@ class PushArmKnowledge(ActiveHostKnowledge, DynamicPushKnowledge):
 
     def compute_arms_eligible_for_push(self, context):
         if context[0] > 3000 and (context[[1,2,3,4]] == 0).all():
-            breakpoint()
             self._arms_eligible_for_push = np.logical_and(
                 (self._hosts_for_arm == 'wally113').all(axis=1),
                 self._interesting_metrics

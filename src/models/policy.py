@@ -416,6 +416,7 @@ class CPushMpts(PushMPTS):
                  arm_knowledge: Knowledge=None,
                  push_kind='plus',
                  learn_pushed = False,
+                 q = None,
                  identifier: typing.Optional[str] = None,
                  **kwargs
                  ):
@@ -441,6 +442,9 @@ class CPushMpts(PushMPTS):
         self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
         self._push_kind = push_kind
         self._learn_pushed = learn_pushed
+        self._q = q
+        if q is not None:
+            self._number_pushed = np.zeros(self._K)
         
         CPushMpts._init_sliding_window(self)
 
@@ -459,9 +463,13 @@ class CPushMpts(PushMPTS):
 
         arm_gets_pushed = self._arm_knowledge.arms_eligible_for_push
 
+        if self._q is not None:
+            arm_gets_pushed = np.logical_and(arm_gets_pushed, self._q < self._number_pushed)
+        
         self._push_received_this_iteration = np.zeros(self._K, dtype=bool)        
         self._push_received_this_iteration[arm_gets_pushed] = True
 
+        
         if self._push_kind == 'plus':
             alpha_pushed = np.where(arm_gets_pushed, self._alpha + self._cpush, self._alpha)
         else:
@@ -470,7 +478,12 @@ class CPushMpts(PushMPTS):
         theta = self._rnd.beta(np.maximum(
             1.0, alpha_pushed), np.maximum(1.0, self._beta))
 
-        return np.argsort(theta)[-self._L:]
+        picked_indicies = np.argsort(theta)[-self._L:]
+
+        if self._q is not None:
+            self._number_pushed[picked_indicies] += self._arm_knowledge.arms_eligible_for_push[picked_indicies]
+        
+        return picked_indicies
 
     def _dynamically_update_neighborhood(self):
         if isinstance(self._arm_knowledge, PushArmKnowledge):
