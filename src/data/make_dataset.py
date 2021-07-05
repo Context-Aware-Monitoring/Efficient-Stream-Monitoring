@@ -566,7 +566,7 @@ def _generate_cpush_mpts():
             },
             {
                 'learn_pushed': [True, False],
-                'cpush': [1.1, 1.05, 1.25, 1.5,1.75 2],
+                'cpush': [1.1, 1.05, 1.25, 1.5,1.75, 2],
                 'q': [None, 10,100,1000]                
             }
         )
