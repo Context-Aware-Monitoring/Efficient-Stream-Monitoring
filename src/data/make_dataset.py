@@ -536,23 +536,23 @@ def _generate_awcpush_mpts():
 def _generate_cpush_mpts():
     policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
 
-    policies.extend(
-        get_cross_validated_policies(
-            {
-                'name': 'cpush-mpts',
-                'context_path':
-                global_config.DATA_DIR + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
-                'push_kind' : 'plus',
+    # policies.extend(
+    #     get_cross_validated_policies(
+    #         {
+    #             'name': 'cpush-mpts',
+    #             'context_path':
+    #             global_config.DATA_DIR + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
+    #             'push_kind' : 'plus',
 
-                'arm_knowledge' : {'name':'push'}
-            },
-            {
-                'learn_pushed': [True, False],
-                'cpush': [1, 3, 5],
-                'q': [10,100,1000]
-            }
-        )
-    )
+    #             'arm_knowledge' : {'name':'push'}
+    #         },
+    #         {
+    #             'learn_pushed': [True, False],
+    #             'cpush': [1, 3, 5],
+    #             'q': [10,100,1000]
+    #         }
+    #     )
+    # )
 
     policies.extend(
         get_cross_validated_policies(
@@ -566,7 +566,7 @@ def _generate_cpush_mpts():
             },
             {
                 'learn_pushed': [True, False],
-                'cpush': [1.25, 1.5, 2, 3],
+                'cpush': [1.1, 1.05, 1.25, 1.5,1.75 2],
                 'q': [None, 10,100,1000]                
             }
         )
