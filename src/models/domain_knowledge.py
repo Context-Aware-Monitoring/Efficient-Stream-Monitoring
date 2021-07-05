@@ -231,23 +231,23 @@ class PushArmKnowledge(ActiveHostKnowledge, DynamicPushKnowledge):
         self._arms_eligible_for_push = np.zeros(self._K, dtype=bool)
 
     def compute_arms_eligible_for_push(self, context):
-        self.update_active_hosts(self._context_columns[context > 0])
-        if self._one_active_host_sufficient_for_push:
-            self._arms_eligible_for_push = np.logical_not(np.logical_and(self._hosts_active_for_arm.any(axis=1), self._interesting_metrics))
-        else:
-            self._arms_eligible_for_push = np.logical_not(np.logical_and(self._hosts_active_for_arm.all(axis=1), self._interesting_metrics))        
-        # if context[0] > 3000 and (context[[1,2,3,4]] == 0).all():
-        #     self._arms_eligible_for_push = np.logical_and(
-        #         (self._hosts_for_arm == 'wally113').all(axis=1),
-        #         self._interesting_metrics
-        #     )
+        # self.update_active_hosts(self._context_columns[context > 0])
+        # if self._one_active_host_sufficient_for_push:
+        #     self._arms_eligible_for_push = np.logical_not(np.logical_and(self._hosts_active_for_arm.any(axis=1), self._interesting_metrics))
+        # else:
+        #     self._arms_eligible_for_push = np.logical_not(np.logical_and(self._hosts_active_for_arm.all(axis=1), self._interesting_metrics))        
+        if context[0] > 2000 and (context[[1,2,3,4]] == 0).all():
+            self._arms_eligible_for_push = np.logical_and(
+                np.logical_and(self._hosts_for_arm[:,0] == 'wally113', np.isin(self._hosts_for_arm[:,1], ['wally117', 'wally122', 'wally123', 'wally124'])),
+                np.logical_and(self._metrics_for_arm[:,0] == 'mem.used', np.isin(self._metrics_for_arm[:,1], ['load.min1', 'load.min5', 'load.min15']))
+            )
         # elif (context[[1,2]] > 10).all() and (context[[3,4]] == 0).all():
         #     self._arms_eligible_for_push =  np.logical_and(
         #         np.isin(self._hosts_for_arm, ['wally113', 'wally122', 'wally124']).all(axis=1),
         #         self._interesting_metrics
         #     )
-        # else:
-        #     self._arms_eligible_for_push = np.zeros(self._K, dtype=bool)
+        else:
+            self._arms_eligible_for_push = np.zeros(self._K, dtype=bool)
         # self.update_active_hosts(self._context_columns[context > 0])
         # if self._one_active_host_sufficient_for_push:
         #     return np.logical_not(np.logical_and(self._hosts_active_for_arm.any(axis=1), self._interesting_metrics))
