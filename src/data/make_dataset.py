@@ -541,7 +541,7 @@ def _generate_cpush_mpts():
             {
                 'name': 'cpush-mpts',
                 'context_path':
-                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
+                global_config.DATA_DIR + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
                 'push_kind' : 'plus',
 
                 'arm_knowledge' : {'name':'push'}
@@ -559,7 +559,7 @@ def _generate_cpush_mpts():
             {
                 'name': 'cpush-mpts',
                 'context_path':
-                global_config.DATA_DIR + '/processed/context/%s_context_host-traces_w%d_s%d.csv',
+                global_config.DATA_DIR + '/processed/context/%s_context_workload-extractor_w%d_s%d.csv',
                 'push_kind' : 'multiply',
 
                 'arm_knowledge' : {'name':'push'}
@@ -572,7 +572,7 @@ def _generate_cpush_mpts():
         )
     )
 
-    _write_configs_for_policies(policies, name='cpush_mem_and_load')
+    _write_configs_for_policies(policies, name='cpush_workload')
 
 def _generate_sim_cpush_mpts():
     policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
