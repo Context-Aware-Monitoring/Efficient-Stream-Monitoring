@@ -172,7 +172,7 @@ class ArmKnowledge(Knowledge, StaticPushArmKnowledge):
             np.arange(self._K), self._indicies_of_arms_that_will_not_be_explored)
 
         self._arm_has_temporal_correlation = np.logical_and(
-            np.isin(self._metrics_for_arm, 'load.min').all(axis=1),
+            np.isin(self._metrics_for_arm, ['load.min1', 'load.min5', 'load.min15']).all(axis=1),
             self._arm_lays_on_same_host
         )
 
@@ -196,7 +196,7 @@ class ActiveHostKnowledge(ArmKnowledge):
         class."""
         pass
 
-    def update_active_hosts(self, context_row):
+    def update_active_hosts(self, active_hosts):
         if self._active_hosts != set(active_hosts):
             self._hosts_active_for_arm = np.isin(
                 self._hosts_for_arm, active_hosts
