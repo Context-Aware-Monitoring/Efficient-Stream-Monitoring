@@ -40,8 +40,8 @@ def _generate_synthetic_experiments_for_gk():
                     sigmas = rnd.uniform(0, sigma_max, no_members)
                     reward[:, groups == cg] = np.maximum(0, rnd.normal(ps_for_group, sigmas, (T, no_members)))
 
-            reward_df_name = '%s/synthetic/synthetic_%s_reward_df_T_%d_arms_%d_c_%.2f_groups_%d.csv' % (
-                global_config.REWARDS_DIR, kind, T, arms, c, unique_groups.shape[0])
+            reward_df_name = '%s/synthetic/synthetic_%s_reward_df_T_%d_arms_%d_c_%.2f_groups_%d_run_%d.csv' % (
+                global_config.REWARDS_DIR, kind, T, arms, c, unique_groups.shape[0], run + 1)
             pd.DataFrame(data = reward).to_csv(reward_df_name)
             for weight in [0.2,0.5,0.8,1.0]:
                 for L in range(1,51):
@@ -106,8 +106,8 @@ def _generate_synthetic_experiments_for_static_push():
                 reward = np.minimum(np.maximum(0, rnd.normal(mus, sigmas, (T, arms))), 1)
 
 
-            reward_path = '%s/synthetic/synthetic_static_push_dist_%s_arms_%d_T_%d.csv' % (
-                global_config.REWARDS_DIR, dist, arms, T)
+            reward_path = '%s/synthetic/synthetic_static_push_dist_%s_arms_%d_T_%d_run_%d.csv' % (
+                global_config.REWARDS_DIR, dist, arms, T, run + 1)
 
             pd.DataFrame(data = reward).to_csv(reward_path)
 
@@ -168,10 +168,10 @@ def _generate_synthetic_experiments_for_push():
                 num_pushes_for_arm = context.sum(axis=1)
                 for i in range(arms):
                     reward[context[:,i], i] = reward_pushed[context[:,i], i]
-                reward_path = '%s/synthetic/synthetic_push_c_%.2f_pc_%.2f_dist_%s_arms_%d_T_%d.csv' % (
-                    global_config.REWARDS_DIR, c, pushes_perc, dist, arms, T)
-                context_path = '%s/context_synthetic_push_c_%.2f_pc_%.2f_dist_%s_arms_%d_T_%d.csv' % (
-                    global_config.CONTEXT_DIR, c, pushes_perc, dist, arms, T)
+                reward_path = '%s/synthetic/synthetic_push_c_%.2f_pc_%.2f_dist_%s_arms_%d_T_%d_run_%d.csv' % (
+                    global_config.REWARDS_DIR, c, pushes_perc, dist, arms, T, run + 1)
+                context_path = '%s/context_synthetic_push_c_%.2f_pc_%.2f_dist_%s_arms_%d_T_%d_run_%d.csv' % (
+                    global_config.CONTEXT_DIR, c, pushes_perc, dist, arms, T, run + 1)
 
                 pd.DataFrame(data = reward).to_csv(reward_path)
                 pd.DataFrame(data = context).to_csv(context_path)
