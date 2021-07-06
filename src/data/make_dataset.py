@@ -19,213 +19,216 @@ arms = 100
 seed = int(time())
 
 def _generate_synthetic_experiments_for_gk():
-    for c, T, kind in product([0, 0.01,0.05,0.1, 0.2], [10, 100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
-        reward = np.zeros(shape=(T,arms))
-        unique_groups = np.unique(groups)
-        ps = rnd.random(unique_groups.shape[0])
+    for run in range(3):
+        for c, T, kind in product([0, 0.01,0.05,0.1, 0.2], [10, 100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
+            reward = np.zeros(shape=(T,arms))
+            unique_groups = np.unique(groups)
+            ps = rnd.random(unique_groups.shape[0])
 
-        for p, cg in zip(ps, unique_groups):
-            no_members = (groups == cg).sum()
-            deviation = rnd.uniform(c, -c, no_members)
-            ps_for_group = np.minimum(np.maximum(p + deviation, 0), 1)
+            for p, cg in zip(ps, unique_groups):
+                no_members = (groups == cg).sum()
+                deviation = rnd.uniform(c, -c, no_members)
+                ps_for_group = np.minimum(np.maximum(p + deviation, 0), 1)
 
-            if kind == 'bern':
-                reward[:, groups == cg] = rnd.binomial(1, ps_for_group, (T, no_members))
-            else:
-                if kind == 'norm-sigma-0.1':
-                    sigma_max = 0.1
-                elif kind == 'norm-sigma-0.25':
-                    sigma_max = 0.25
-                sigmas = rnd.uniform(0, sigma_max, no_members)
-                reward[:, groups == cg] = np.maximum(0, rnd.normal(ps_for_group, sigmas, (T, no_members)))
+                if kind == 'bern':
+                    reward[:, groups == cg] = rnd.binomial(1, ps_for_group, (T, no_members))
+                else:
+                    if kind == 'norm-sigma-0.1':
+                        sigma_max = 0.1
+                    elif kind == 'norm-sigma-0.25':
+                        sigma_max = 0.25
+                    sigmas = rnd.uniform(0, sigma_max, no_members)
+                    reward[:, groups == cg] = np.maximum(0, rnd.normal(ps_for_group, sigmas, (T, no_members)))
 
-        reward_df_name = '%s/synthetic/synthetic_%s_reward_df_T_%d_arms_%d_c_%.2f_groups_%d.csv' % (
-            global_config.REWARDS_DIR, kind, T, arms, c, unique_groups.shape[0])
-        pd.DataFrame(data = reward).to_csv(reward_df_name)
-        for weight in [0.2,0.5,0.8,1.0]:
-            for L in range(1,51):
-                policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
+            reward_df_name = '%s/synthetic/synthetic_%s_reward_df_T_%d_arms_%d_c_%.2f_groups_%d.csv' % (
+                global_config.REWARDS_DIR, kind, T, arms, c, unique_groups.shape[0])
+            pd.DataFrame(data = reward).to_csv(reward_df_name)
+            for weight in [0.2,0.5,0.8,1.0]:
+                for L in range(1,51):
+                    policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
 
-                policies.extend([
-                    {
-                            'name': 'mpts',
-                            'graph_knowledge': {
-                                'name' : 'synthetic',
-                                'weight' : weight,
-                                'groups': groups.tolist(),
-                                'only_push_arms_that_were_not_picked': opatwnp
-                            }
-                    } for opatwnp in [True, False]
-                ])
-                
-                error_gk_policies = []
-                for error_kind, perc_affected, opatwnp in product(['remove', 'random'], [0.01,0.05,0.1,0.25,0.5,0.75,1.0], [True, False]):
-                    error_gk_policies.append(
+                    policies.extend([
                         {
-                            'name': 'mpts',
-                            'graph_knowledge': {
-                                'name' : 'wrong-synthetic',
-                                'weight' : weight,
-                                'groups': groups.tolist(),
-                                'percentage_affected' : perc_affected,
-                                'error_kind' : error_kind,
-                                'only_push_arms_that_were_not_picked': opatwnp
-                            }
-                        }
-                    )
-                policies.extend(error_gk_policies)
-                config = {
-                    'policies': policies,
-                    'reward_path': reward_df_name,
-                    'seed': rnd.randint(10000),
-                    'L': L,
-                    'T': T,
-                    'c': c,
-                    'dist': kind
-                }
+                                'name': 'mpts',
+                                'graph_knowledge': {
+                                    'name' : 'synthetic',
+                                    'weight' : weight,
+                                    'groups': groups.tolist(),
+                                    'only_push_arms_that_were_not_picked': opatwnp
+                                }
+                        } for opatwnp in [True, False]
+                    ])
 
-                with open('%s/synthetic_%s_gk_dk_w_%.1f_L_%d_groups_%d_T_%d_c_%.2f.yml' % (global_config.EXPERIMENT_CONFIG_DIR, kind, weight, L, unique_groups.shape[0], T, c), 'w') as outfile:
-                    yaml.dump(config, outfile, default_flow_style=False)
+                    error_gk_policies = []
+                    for error_kind, perc_affected, opatwnp in product(['remove', 'random'], [0.01,0.05,0.1,0.25,0.5,0.75,1.0], [True, False]):
+                        error_gk_policies.append(
+                            {
+                                'name': 'mpts',
+                                'graph_knowledge': {
+                                    'name' : 'wrong-synthetic',
+                                    'weight' : weight,
+                                    'groups': groups.tolist(),
+                                    'percentage_affected' : perc_affected,
+                                    'error_kind' : error_kind,
+                                    'only_push_arms_that_were_not_picked': opatwnp
+                                }
+                            }
+                        )
+                    policies.extend(error_gk_policies)
+                    config = {
+                        'policies': policies,
+                        'reward_path': reward_df_name,
+                        'seed': rnd.randint(10000),
+                        'L': L,
+                        'T': T,
+                        'c': c,
+                        'dist': kind
+                    }
+
+                    with open('%s/synthetic_%s_gk_dk_w_%.1f_L_%d_groups_%d_T_%d_c_%.2f_run_%d.yml' % (global_config.EXPERIMENT_CONFIG_DIR, kind, weight, L, unique_groups.shape[0], T, c, run+1), 'w') as outfile:
+                        yaml.dump(config, outfile, default_flow_style=False)
                     
 
 def _generate_synthetic_experiments_for_static_push():
-    for T, dist in product([10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):        
-        reward = np.zeros(shape=(T,arms))
+    for run in range(3):
+        for T, dist in product([10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):        
+            reward = np.zeros(shape=(T,arms))
 
-        mus = -np.sort(-rnd.uniform(0, 1, arms))
+            mus = -np.sort(-rnd.uniform(0, 1, arms))
 
-        if dist == 'bern':
-            reward = rnd.binomial(1, mus, (T, arms))
-        else:
-            if dist == 'norm-sigma-0.1':
-                sigmas = rnd.uniform(0, 0.1, arms)
-            elif dist == 'norm-sigma-0.25':
-                sigmas = rnd.uniform(0, 0.25, arms)
-            reward = np.minimum(np.maximum(0, rnd.normal(mus, sigmas, (T, arms))), 1)
+            if dist == 'bern':
+                reward = rnd.binomial(1, mus, (T, arms))
+            else:
+                if dist == 'norm-sigma-0.1':
+                    sigmas = rnd.uniform(0, 0.1, arms)
+                elif dist == 'norm-sigma-0.25':
+                    sigmas = rnd.uniform(0, 0.25, arms)
+                reward = np.minimum(np.maximum(0, rnd.normal(mus, sigmas, (T, arms))), 1)
 
 
-        reward_path = '%s/synthetic/synthetic_static_push_dist_%s_arms_%d_T_%d.csv' % (
-            global_config.REWARDS_DIR, dist, arms, T)
-
-        pd.DataFrame(data = reward).to_csv(reward_path)
-
-        for L in range(1,51):
-            policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
-
-            policies.extend(get_cross_validated_policies(
-                {'name': 'push-mpts', 'arm_knowledge':{'name':'synthetic-static-push'}},
-                {'push_likely_arms' : [0,1,3,5], 'push_unlikely_arms': [0,1,3,5]}
-            ))
-            for kind in ['remove', 'random']:
-                for paff in [0.01,0.05,0.1,0.25,0.5,0.75,1.0]:
-                    policies.extend(get_cross_validated_policies(
-                        {'name': 'push-mpts', 'arm_knowledge':{'name':'synthetic-static-push-wrong', 'kind':kind, 'percentage_affected' : paff}},
-                        {
-                            'push_likely_arms' : [0,1,3,5],
-                            'push_unlikely_arms' : [0,1,3,5]
-                        }
-                    ))
-
-            config = {
-                'policies': policies,
-                'reward_path': reward_path,
-                'seed': rnd.randint(10000),
-                'L': L,
-                'T': T,
-                'dist' : dist
-            }
-
-            with open('%s/synthetic_static_push_dist_%s_arms_%d_T_%d_L_%d.yml' % (
-                global_config.EXPERIMENT_CONFIG_DIR, dist, arms, T, L), 'w') as outfile:
-                yaml.dump(config, outfile, default_flow_style=False)
-
-def _generate_synthetic_experiments_for_push():
-    for c, T, dist in product([0.1,0.2,0.3,0.5], [10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
-        reward = np.zeros(shape=(T,arms))
-
-        mus = -np.sort(-rnd.uniform(0, 1-c, arms))
-
-        if dist == 'bern':
-            reward = rnd.binomial(1, mus, (T, arms))
-            reward_pushed = rnd.binomial(1, mus + c, (T, arms))
-        else:
-            if dist == 'norm-sigma-0.1':
-                sigmas = rnd.uniform(0, 0.1, arms)
-            elif dist == 'norm-sigma-0.25':
-                sigmas = rnd.uniform(0, 0.25, arms)
-            reward = np.minimum(np.maximum(0, rnd.normal(mus, sigmas, (T, arms))), 1)
-            reward_pushed = np.minimum(np.maximum(0, rnd.normal(mus + c, sigmas, (T, arms))), 1)
-
-        for pushes_perc in [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
-            context = np.zeros(T * arms, dtype=bool)
-            total_num_pushes = int(np.floor(T * arms * pushes_perc))
-
-            context[rnd.choice(T * arms, total_num_pushes, replace=False)] = True
-            context = context.reshape(T, arms)
-            num_pushes_for_arm = context.sum(axis=1)
-            for i in range(arms):
-                reward[context[:,i], i] = reward_pushed[context[:,i], i]
-            reward_path = '%s/synthetic/synthetic_push_c_%.2f_pc_%.2f_dist_%s_arms_%d_T_%d.csv' % (
-                global_config.REWARDS_DIR, c, pushes_perc, dist, arms, T)
-            context_path = '%s/context_synthetic_push_c_%.2f_pc_%.2f_dist_%s_arms_%d_T_%d.csv' % (
-                global_config.CONTEXT_DIR, c, pushes_perc, dist, arms, T)
+            reward_path = '%s/synthetic/synthetic_static_push_dist_%s_arms_%d_T_%d.csv' % (
+                global_config.REWARDS_DIR, dist, arms, T)
 
             pd.DataFrame(data = reward).to_csv(reward_path)
-            pd.DataFrame(data = context).to_csv(context_path)
 
             for L in range(1,51):
                 policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
-                for cpush in [1.01,1.03,1.05,1.1,1.2,1.25, 1.5,1.75,2.0,2.5,3,5]:
-                    policies.append(
-                        {
-                            'name': 'cpush-mpts',
-                            'context_path' : context_path,
-                            'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
-                            'push_kind' : 'multiply',
-                            'cpush': cpush,
-                            'learn_pushed' : True
-                        })
-                    policies.append(
-                        {
-                            'name': 'cpush-mpts',
-                            'context_path' : context_path,
-                            'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
-                            'push_kind' : 'multiply',
-                            'cpush': cpush,
-                            'learn_pushed' : False
-                        })
 
-                for cpush in [1,2,3,4,5]:
-                    policies.append({
-                            'name': 'cpush-mpts',
-                            'context_path' : context_path,
-                            'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
-                            'push_kind' : 'plus',
-                            'learn_pushed' : True,
-                            'cpush': cpush})
+                policies.extend(get_cross_validated_policies(
+                    {'name': 'push-mpts', 'arm_knowledge':{'name':'synthetic-static-push'}},
+                    {'push_likely_arms' : [0,1,3,5], 'push_unlikely_arms': [0,1,3,5]}
+                ))
+                for kind in ['remove', 'random']:
+                    for paff in [0.01,0.05,0.1,0.25,0.5,0.75,1.0]:
+                        policies.extend(get_cross_validated_policies(
+                            {'name': 'push-mpts', 'arm_knowledge':{'name':'synthetic-static-push-wrong', 'kind':kind, 'percentage_affected' : paff}},
+                            {
+                                'push_likely_arms' : [0,1,3,5],
+                                'push_unlikely_arms' : [0,1,3,5]
+                            }
+                        ))
 
-                    policies.append({
-                            'name': 'cpush-mpts',
-                            'context_path' : context_path,
-                            'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
-                            'push_kind' : 'plus',
-                            'learn_pushed' : False,
-                            'cpush': cpush})
-                    
                 config = {
                     'policies': policies,
                     'reward_path': reward_path,
                     'seed': rnd.randint(10000),
                     'L': L,
-                    'c': c,
-                    'pc': pushes_perc,
                     'T': T,
                     'dist' : dist
                 }
 
-                with open('%s/synthetic_push_dist_%s_c_%.2f_pc_%.2f_arms_%d_T_%d_L_%d.yml' % (
-                    global_config.EXPERIMENT_CONFIG_DIR, dist, c, pushes_perc, arms, T, L), 'w') as outfile:
-                    yaml.dump(config, outfile, default_flow_style=False)                    
+                with open('%s/synthetic_static_push_dist_%s_arms_%d_T_%d_L_%d_run_%d.yml' % (
+                        global_config.EXPERIMENT_CONFIG_DIR, dist, arms, T, L, run+1), 'w') as outfile:
+                    yaml.dump(config, outfile, default_flow_style=False)
+
+def _generate_synthetic_experiments_for_push():
+    for run in range(3):
+        for c, T, dist in product([0.1,0.2,0.3,0.5], [10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
+            reward = np.zeros(shape=(T,arms))
+
+            mus = -np.sort(-rnd.uniform(0, 1-c, arms))
+
+            if dist == 'bern':
+                reward = rnd.binomial(1, mus, (T, arms))
+                reward_pushed = rnd.binomial(1, mus + c, (T, arms))
+            else:
+                if dist == 'norm-sigma-0.1':
+                    sigmas = rnd.uniform(0, 0.1, arms)
+                elif dist == 'norm-sigma-0.25':
+                    sigmas = rnd.uniform(0, 0.25, arms)
+                reward = np.minimum(np.maximum(0, rnd.normal(mus, sigmas, (T, arms))), 1)
+                reward_pushed = np.minimum(np.maximum(0, rnd.normal(mus + c, sigmas, (T, arms))), 1)
+
+            for pushes_perc in [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
+                context = np.zeros(T * arms, dtype=bool)
+                total_num_pushes = int(np.floor(T * arms * pushes_perc))
+
+                context[rnd.choice(T * arms, total_num_pushes, replace=False)] = True
+                context = context.reshape(T, arms)
+                num_pushes_for_arm = context.sum(axis=1)
+                for i in range(arms):
+                    reward[context[:,i], i] = reward_pushed[context[:,i], i]
+                reward_path = '%s/synthetic/synthetic_push_c_%.2f_pc_%.2f_dist_%s_arms_%d_T_%d.csv' % (
+                    global_config.REWARDS_DIR, c, pushes_perc, dist, arms, T)
+                context_path = '%s/context_synthetic_push_c_%.2f_pc_%.2f_dist_%s_arms_%d_T_%d.csv' % (
+                    global_config.CONTEXT_DIR, c, pushes_perc, dist, arms, T)
+
+                pd.DataFrame(data = reward).to_csv(reward_path)
+                pd.DataFrame(data = context).to_csv(context_path)
+
+                for L in range(1,51):
+                    policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
+                    for cpush in [1.01,1.03,1.05,1.1,1.2,1.25, 1.5,1.75,2.0,2.5,3,5]:
+                        policies.append(
+                            {
+                                'name': 'cpush-mpts',
+                                'context_path' : context_path,
+                                'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
+                                'push_kind' : 'multiply',
+                                'cpush': cpush,
+                                'learn_pushed' : True
+                            })
+                        policies.append(
+                            {
+                                'name': 'cpush-mpts',
+                                'context_path' : context_path,
+                                'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
+                                'push_kind' : 'multiply',
+                                'cpush': cpush,
+                                'learn_pushed' : False
+                            })
+
+                    for cpush in [1,2,3,4,5]:
+                        policies.append({
+                                'name': 'cpush-mpts',
+                                'context_path' : context_path,
+                                'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
+                                'push_kind' : 'plus',
+                                'learn_pushed' : True,
+                                'cpush': cpush})
+
+                        policies.append({
+                                'name': 'cpush-mpts',
+                                'context_path' : context_path,
+                                'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
+                                'push_kind' : 'plus',
+                                'learn_pushed' : False,
+                                'cpush': cpush})
+
+                    config = {
+                        'policies': policies,
+                        'reward_path': reward_path,
+                        'seed': rnd.randint(10000),
+                        'L': L,
+                        'c': c,
+                        'pc': pushes_perc,
+                        'T': T,
+                        'dist' : dist
+                    }
+
+                    with open('%s/synthetic_push_dist_%s_c_%.2f_pc_%.2f_arms_%d_T_%d_L_%d_run_%d.yml' % (
+                            global_config.EXPERIMENT_CONFIG_DIR, dist, c, pushes_perc, arms, T, L, run + 1), 'w') as outfile:
+                        yaml.dump(config, outfile, default_flow_style=False)                    
 
 def clean_metrics_data(metrics_dir: str, start: str, end: str, normalize:bool =True):
     """Cleans the metrics csv files by removing the rows that don't lie within
@@ -616,13 +619,13 @@ def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
 
-    # _generate_mpts()
-    # _generate_sim_cpush_mpts()
-    # _generate_cpush_mpts()
-    _generate_cb()
-    # _generate_synthetic_experiments_for_gk()
-    # _generate_synthetic_experiments_for_static_push()
-    # _generate_synthetic_experiments_for_push()
+    _generate_mpts()
+    _generate_sim_cpush_mpts()
+    _generate_cpush_mpts()
+    # _generate_cb()
+    _generate_synthetic_experiments_for_gk()
+    _generate_synthetic_experiments_for_static_push()
+    _generate_synthetic_experiments_for_push()
     # _generate_push_mpts()
 
 
