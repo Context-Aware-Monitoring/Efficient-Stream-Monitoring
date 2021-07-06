@@ -618,8 +618,8 @@ def _generate_experiment_configs():
 
     # _generate_mpts()
     # _generate_sim_cpush_mpts()
-    _generate_cpush_mpts()
-    # _generate_cb()
+    # _generate_cpush_mpts()
+    _generate_cb()
     # _generate_synthetic_experiments_for_gk()
     # _generate_synthetic_experiments_for_static_push()
     # _generate_synthetic_experiments_for_push()
