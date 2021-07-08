@@ -470,16 +470,17 @@ def _generate_push_mpts():
     _write_configs_for_policies(policies, name='push_mpts')
 
 def _generate_mpts():
-    policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
+    for T in [10,100,500,1000, None]:
+        policies = [{'name': 'mpts', 'T':T, 'identifier' : 'baseline'}]
 
-    policies.extend(
-        get_cross_validated_policies(
-            {'name': 'mpts'},
-            {
-                'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES
-            }
+        policies.extend(
+            get_cross_validated_policies(
+                {'name': 'mpts', 'T': T},
+                {
+                    'graph_knowledge' : global_config.GRAPH_DOMAIN_KNOWLEDGES
+                }
+            )
         )
-    )
     
     # policies.extend(
     #     get_cross_validated_policies(
@@ -492,7 +493,7 @@ def _generate_mpts():
     #     )
     # )
     
-    _write_configs_for_policies(policies, name='mpts')
+    _write_configs_for_policies(policies, name='mpts_T_%d' % T)
 
 def _generate_cb():
     policies = [{'name' : 'mpts', 'identifier' : 'baseline'}, {'name': 'random'}]
@@ -619,13 +620,13 @@ def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
 
-    # _generate_mpts()
+    _generate_mpts()
     # _generate_sim_cpush_mpts()
     # _generate_cpush_mpts()
     # _generate_cb()
     # _generate_synthetic_experiments_for_gk()
     # _generate_synthetic_experiments_for_static_push()
-    _generate_synthetic_experiments_for_push()
+    # _generate_synthetic_experiments_for_push()
     # _generate_push_mpts()
 
 
