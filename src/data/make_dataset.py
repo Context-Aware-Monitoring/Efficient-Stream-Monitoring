@@ -492,8 +492,11 @@ def _generate_mpts():
     #         }
     #     )
     # )
-    
-    _write_configs_for_policies(policies, name='mpts_T_%d' % T)
+
+    if T is not None:
+        _write_configs_for_policies(policies, name='mpts_T_%d' % T)
+    else:
+        _write_configs_for_policies(policies, name='mpts_T')
 
 def _generate_cb():
     policies = [{'name' : 'mpts', 'identifier' : 'baseline'}, {'name': 'random'}]

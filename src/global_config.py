@@ -40,16 +40,16 @@ GRAPH_DOMAIN_KNOWLEDGES.extend([
     {'name' : 'correct', 'weight': weight, 'only_push_arms_that_were_not_picked' : opatwnp} for weight, opatwnp in product([0.8,1.0], [True, False])
 ])
 
-GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'unify', 'weight': weight, 'n_affected' : n_affected, 'only_push_arms_that_were_not_picked': opatwnp} for weight, n_affected, opatwnp in product([0.8,1.0], [1,2,5,10], [True, False])
-])
+# GRAPH_DOMAIN_KNOWLEDGES.extend([
+#     {'name' : 'unify', 'weight': weight, 'n_affected' : n_affected, 'only_push_arms_that_were_not_picked': opatwnp} for weight, n_affected, opatwnp in product([0.8,1.0], [1,2,5,10], [True, False])
+# ])
 
-GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'add', 'weight': weight, 'n_affected' : n_affected, 'only_push_arms_that_were_not_picked': opatwnp} for weight, n_affected, opatwnp in product([0.2,0.5,0.8,1.0], [1,2,5,10,15], [True, False])
-])
+# GRAPH_DOMAIN_KNOWLEDGES.extend([
+#     {'name' : 'add', 'weight': weight, 'n_affected' : n_affected, 'only_push_arms_that_were_not_picked': opatwnp} for weight, n_affected, opatwnp in product([0.2,0.5,0.8,1.0], [1,2,5,10,15], [True, False])
+# ])
 
-GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'remove', 'weight': weight, 'n_affected' : n_affected, 'only_push_arms_that_were_not_picked': opatwnp} for weight, n_affected, opatwnp in product([0.8,1.0], [1,5,10,20,50,100,200,300,420], [True, False])
-])
+# GRAPH_DOMAIN_KNOWLEDGES.extend([
+#     {'name' : 'remove', 'weight': weight, 'n_affected' : n_affected, 'only_push_arms_that_were_not_picked': opatwnp} for weight, n_affected, opatwnp in product([0.8,1.0], [1,5,10,20,50,100,200,300,420], [True, False])
+# ])
 
 
