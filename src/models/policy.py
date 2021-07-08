@@ -41,13 +41,17 @@ class AbstractBandit(ABC):
                  sliding_window_type: str = None,
                  graph_knowledge: Knowledge = None,
                  arm_knowledge: Knowledge = None,
+                 T: int = None,
                  identifier: typing.Optional[str] = None
                  ):
         self._L = L
         self._K = len(reward_df.columns)
         self._reward_df = reward_df
         self._arms = reward_df.columns.values
-        self._T = len(reward_df.index)
+        if T is None:
+            self._T = len(reward_df.index)
+        else:
+            self._T = T
 
         self._picked_arms_indicies = None
         self._iteration = 0
@@ -129,6 +133,7 @@ class AbstractBandit(ABC):
             self._reward_df.values[self._iteration, self._picked_arms_indicies]).sum()
         self._regret[self._iteration] = max_reward_this_round - \
             received_reward_this_round
+        
         self._iteration += 1
 
     def _init_sliding_window(self):
@@ -214,6 +219,7 @@ class MPTS(AbstractBandit):
                  sliding_window_type: str = None,
                  graph_knowledge: Knowledge = None,
                  arm_knowledge: Knowledge = None,
+                 T: int = None,
                  identifier: typing.Optional[str] = None
                  ):
         """Constructs the MPTS policy.
@@ -228,6 +234,7 @@ class MPTS(AbstractBandit):
             sliding_window_type=sliding_window_type,
             graph_knowledge=graph_knowledge,
             arm_knowledge=arm_knowledge,
+            T = T,
             identifier=identifier
         )
 
@@ -323,6 +330,7 @@ class PushMPTS(MPTS):
                  sliding_window_size: int = None,
                  graph_knowledge: Knowledge = None,
                  arm_knowledge: Knowledge = None,
+                 T: int = None,
                  identifier: typing.Optional[str] = None
                  ):
         """Constructs the Push Mpts algorithm.
@@ -337,7 +345,7 @@ class PushMPTS(MPTS):
         """
         super().__init__(L, reward_df, random_seed,
                          sliding_window_size=sliding_window_size,
-                         graph_knowledge=graph_knowledge, arm_knowledge=arm_knowledge,identifier=identifier)
+                         graph_knowledge=graph_knowledge, arm_knowledge=arm_knowledge, T=T, identifier=identifier)
 
         self._push_temporal_correlated_arms = 0.0
         self._push_likely_arms = 0.0
@@ -417,6 +425,7 @@ class CPushMpts(PushMPTS):
                  push_kind='plus',
                  learn_pushed = False,
                  q = None,
+                 T: int = None,
                  identifier: typing.Optional[str] = None,
                  **kwargs
                  ):
@@ -432,7 +441,7 @@ class CPushMpts(PushMPTS):
                          push_unlikely_arms, push_temporal_correlated_arms,
                          control_host, sliding_window_size=sliding_window_size,
                          graph_knowledge=graph_knowledge, arm_knowledge=arm_knowledge,
-                         identifier=identifier)
+                         T=T, identifier=identifier)
         assert reward_df.values.shape[0] == context_df.values.shape[0]
 
         self._alpha = np.ones(self._K)
@@ -781,3 +790,44 @@ class CBStreamingModel(CBAbstractBandit):
                 self._batch_size * self._L).reshape(-1, self._L)
             self._received_rewards = np.zeros(
                 self._batch_size * self._L).reshape(-1, self._L)
+
+
+class CBMPTS(MPTS):
+
+    def __init__(
+            self,
+            L: int,
+            reward_df: pd.DataFrame,
+            random_seed: int,
+            context_df: pd.DataFrame,
+            sliding_window_size: int = None,
+            graph_knowledge: Knowledge = None,
+            arm_knowledge: Knowledge = None,
+            T: int = None,
+            identifier: typing.Optional[str] = None
+    ):
+        super().__init__(L, reward_df, random_seed, sliding_window_size = sliding_window_size, graph_knowledge = graph_knowledge, arm_knowledge=arm_knowledge, T=T, identifier=identifier)
+        self._context_df = context_df
+        no_contexts = np.unique(context_df.values).shape[0]
+        self._alpha_per_context = np.zeros((no_contexts, self._K))
+        self._beta_per_context = np.zeros((no_contexts, self._K))        
+
+    def _pick_arms(self):
+        """Pushes the arms with the context. Uses the underlying PushMPTS
+        algorithm to pick the arms.
+        """
+        current_context = self._context_df.values[self._iteration, :]
+        self._alpha = np.where(current_context, self._alpha_per_context[0,:], self._alpha_per_context[1,:])
+        self._beta = np.where(current_context, self._beta_per_context[0,:], self._beta_per_context[1,:])        
+
+        return super()._pick_arms()
+
+    def _learn(self):
+        current_context = self._context_df.values[self._iteration, :]        
+        reward_this_round = self._reward_df.values[self._iteration,
+                                                   self._picked_arms_indicies]
+
+        self._alpha_per_context[0, self._picked_arms_indicies] += np.where(current_context[self._picked_arms_indicies], reward_this_round, 0)
+        self._alpha_per_context[1, self._picked_arms_indicies] += np.where(current_context[self._picked_arms_indicies] == False, reward_this_round, 0)
+        self._beta_per_context[0, self._picked_arms_indicies] += np.where(current_context[self._picked_arms_indicies], 1-reward_this_round, 0)
+        self._beta_per_context[1, self._picked_arms_indicies] += np.where(current_context[self._picked_arms_indicies] == False, 1-reward_this_round, 0)        

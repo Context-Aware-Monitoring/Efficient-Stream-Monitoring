@@ -177,7 +177,7 @@ def _generate_synthetic_experiments_for_push():
                 pd.DataFrame(data = context).to_csv(context_path)
 
                 for L in range(1,51):
-                    policies = [{'name' : 'mpts', 'identifier': 'baseline'}]
+                    policies = [{'name' : 'mpts', 'identifier': 'baseline'}, {'name': 'cbmpts', 'context_path' : context_path}]
                     for cpush in [1.01,1.03,1.05,1.1,1.2,1.25, 1.5,1.75,2.0,2.5,3,5]:
                         policies.append(
                             {
@@ -623,8 +623,8 @@ def _generate_experiment_configs():
     # _generate_sim_cpush_mpts()
     # _generate_cpush_mpts()
     # _generate_cb()
-    _generate_synthetic_experiments_for_gk()
-    _generate_synthetic_experiments_for_static_push()
+    # _generate_synthetic_experiments_for_gk()
+    # _generate_synthetic_experiments_for_static_push()
     _generate_synthetic_experiments_for_push()
     # _generate_push_mpts()
 
