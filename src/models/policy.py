@@ -519,6 +519,128 @@ class CPushMpts(PushMPTS):
                 0
             )
 
+class MultiCPushMpts(PushMPTS):
+    """MPTS bandit algorithm using domain knowledge to initially push more
+    likely arms and using dynamic pushes based on the context to further
+    improve picking of arms. The expected context csv file contains a boolean
+    for each arms that says whether or not to push the arm.
+    """
+
+    def __init__(self,
+                 L: int,
+                 reward_df: pd.DataFrame,
+                 random_seed: int,
+                 context_df: pd.DataFrame,
+                 push_likely_arms: float = 0.0,
+                 push_unlikely_arms: float = 0.0,
+                 push_temporal_correlated_arms: float = 0.0,
+                 control_host: str = 'wally113',
+                 cpush: np.ndarray = np.array([1.0]),
+                 sliding_window_size: int = None,
+                 graph_knowledge: Knowledge = None,
+                 arm_knowledge: Knowledge=None,
+                 push_kind='plus',
+                 learn_pushed = False,
+                 q = None,
+                 T: int = None,
+                 identifier: typing.Optional[str] = None,
+                 **kwargs
+                 ):
+        """Constructs the contextual push MPTS algorithm.
+
+        Args:
+          context_df (DataFrame): Context that contains the number of events
+          per host (columns) and iterations (rows).
+          cpush (float): Push for active arms
+          max_number_pushes (int): Number of times an arm gets pushed
+        """
+        super().__init__(L, reward_df, random_seed, push_likely_arms,
+                         push_unlikely_arms, push_temporal_correlated_arms,
+                         control_host, sliding_window_size=sliding_window_size,
+                         graph_knowledge=graph_knowledge, arm_knowledge=arm_knowledge,
+                         T=T, identifier=identifier)
+        assert reward_df.values.shape[0] == context_df.values.shape[0]
+        assert len(cpush) == np.unique(context_df.values).shape[0]-1
+
+        self._alpha = np.ones(self._K)
+        self._beta = np.ones(self._K)
+        self._context_df = context_df
+        self._cpush = np.array(cpush)
+        self._push_received_this_iteration = np.zeros(self._K, dtype=bool)
+        self._push_kind = push_kind
+        self._learn_pushed = learn_pushed
+        self._q = q
+        if q is not None:
+            self._number_pushed = np.zeros(self._K)
+        
+        CPushMpts._init_sliding_window(self)
+
+    def _init_sliding_window(self):
+        if self._sliding_window_size is not None:
+            self._sliding_push_received = np.zeros(
+                shape=(self._sliding_window_size, self._K), dtype=bool)
+
+    def _pick_arms(self):
+        """Pushes the arms with the context. Uses the underlying PushMPTS
+        algorithm to pick the arms.
+        """
+        current_context = self._context_df.values[self._iteration, :]
+
+        self._arm_knowledge.compute_arms_eligible_for_push(current_context)
+
+        arm_gets_pushed = self._arm_knowledge.arms_eligible_for_push
+
+        if self._q is not None:
+            arm_gets_pushed = np.logical_and(arm_gets_pushed, self._q < self._number_pushed)
+        
+        self._push_received_this_iteration = np.zeros(self._K, dtype=bool)        
+        self._push_received_this_iteration[arm_gets_pushed] = True
+
+
+        context_indicies = current_context[current_context > 0].astype(int)
+        
+        if self._push_kind == 'plus':
+            alpha_pushed = np.copy(self._alpha)
+            alpha_pushed[arm_gets_pushed] += self._cpush[context_indicies - 1]
+        else:
+            alpha_pushed = np.copy(self._alpha)
+            alpha_pushed[arm_gets_pushed] *= self._cpush[context_indicies - 1]            
+
+        theta = self._rnd.beta(np.maximum(
+            1.0, alpha_pushed), np.maximum(1.0, self._beta))
+
+        picked_indicies = np.argsort(theta)[-self._L:]
+
+        if self._q is not None:
+            self._number_pushed[picked_indicies] += self._arm_knowledge.arms_eligible_for_push[picked_indicies]
+        
+        return picked_indicies
+
+    def _dynamically_update_neighborhood(self):
+        if isinstance(self._arm_knowledge, PushArmKnowledge):
+            current_context = self._context_df.values[self._iteration, :]
+            active_hosts = self._context_df.columns.values[current_context > 0]
+
+            self._graph_knowledge.update_active_hosts(active_hosts)
+
+    def _learn(self):
+        if self._learn_pushed == True:
+            super()._learn()
+        else:
+            reward_this_round = self._reward_df.values[self._iteration, :]
+            picked_arm_receives_update = self._push_received_this_iteration[self._picked_arms_indicies] == False
+
+            self._alpha[self._picked_arms_indicies] += np.where(
+                picked_arm_receives_update,
+                reward_this_round[self._picked_arms_indicies],
+                0
+            )
+            self._beta[self._picked_arms_indicies] += np.where(
+                picked_arm_receives_update,
+                1 - reward_this_round[self._picked_arms_indicies],
+                0
+            )            
+
 class AWCPushMpts(CPushMpts):
     def __init__(self,
                  L: int,
@@ -816,18 +938,16 @@ class CBMPTS(MPTS):
         """Pushes the arms with the context. Uses the underlying PushMPTS
         algorithm to pick the arms.
         """
-        current_context = self._context_df.values[self._iteration, :]
-        self._alpha = np.where(current_context, self._alpha_per_context[0,:], self._alpha_per_context[1,:])
-        self._beta = np.where(current_context, self._beta_per_context[0,:], self._beta_per_context[1,:])        
+        current_context = self._context_df.values[self._iteration, :].astype(int)
+        self._alpha = self._alpha_per_context[current_context, np.arange(self._K)]
+        self._beta = self._beta_per_context[current_context, np.arange(self._K)]
 
         return super()._pick_arms()
 
     def _learn(self):
-        current_context = self._context_df.values[self._iteration, :]        
+        current_context = self._context_df.values[self._iteration, :].astype(int)
         reward_this_round = self._reward_df.values[self._iteration,
                                                    self._picked_arms_indicies]
 
-        self._alpha_per_context[0, self._picked_arms_indicies] += np.where(current_context[self._picked_arms_indicies], reward_this_round, 0)
-        self._alpha_per_context[1, self._picked_arms_indicies] += np.where(current_context[self._picked_arms_indicies] == False, reward_this_round, 0)
-        self._beta_per_context[0, self._picked_arms_indicies] += np.where(current_context[self._picked_arms_indicies], 1-reward_this_round, 0)
-        self._beta_per_context[1, self._picked_arms_indicies] += np.where(current_context[self._picked_arms_indicies] == False, 1-reward_this_round, 0)        
+        self._alpha_per_context[current_context[self._picked_arms_indicies], self._picked_arms_indicies] += reward_this_round
+        self._beta_per_context[current_context[self._picked_arms_indicies], self._picked_arms_indicies] += 1-reward_this_round
