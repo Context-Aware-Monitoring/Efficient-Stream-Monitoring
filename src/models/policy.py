@@ -720,7 +720,7 @@ class CBAbstractBandit(AbstractBandit):
 
         self._scaler = StandardScaler()
         self._scaler.fit(
-            self._context_df.values[np.random.choice(self._T, self._K, replace=False), :])
+            self._context_df.values[np.random.choice(self._T, scaler_sample_size, replace=False), :])
 
     def _create_algorithm(self, base_algorithm, batch_train: bool, **kwargs):
         if self._algorithm_name == 'egreedy':
