@@ -457,17 +457,21 @@ def _write_experiment_config_to_disk(config: dict, name: str):
         yaml.dump(config, yml_file, default_flow_style=False)
 
 def _generate_push_mpts():
-    policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
+    for T in [10,100,500,1000, None]:    
+        policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
 
-    policies.extend(get_cross_validated_policies(
-        {'name': 'push-mpts', 'arm_knowledge' : {'name' : 'correct'}},
-        {
-            'push_unlikely_arms' : [0,1,3,5],
-            'push_likely_arms': [0,1,3,5]
-            # 'push_temporal_correlated_arms': [1,3,5,10]
-        }))
+        policies.extend(get_cross_validated_policies(
+            {'name': 'push-mpts', 'arm_knowledge' : {'name' : 'correct'}},
+            {
+                'push_unlikely_arms' : [0,1,3,5],
+                'push_likely_arms': [0,1,3,5]
+                # 'push_temporal_correlated_arms': [1,3,5,10]
+            }))
 
-    _write_configs_for_policies(policies, name='push_mpts')
+        if T is not None:
+            _write_configs_for_policies(policies, name='push_mpts_T_%d' % T)
+        else:
+            _write_configs_for_policies(policies, name='push_mpts')
 
 def _generate_mpts():
     for T in [10,100,500,1000, None]:
