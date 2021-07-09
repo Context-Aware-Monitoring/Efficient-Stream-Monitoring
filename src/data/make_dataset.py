@@ -458,10 +458,10 @@ def _write_experiment_config_to_disk(config: dict, name: str):
 
 def _generate_push_mpts():
     for T in [10,100,500,1000, None]:    
-        policies = [{'name': 'mpts', 'identifier' : 'baseline'}]
+        policies = [{'name': 'mpts', 'identifier' : 'baseline', 'T':T}]
 
         policies.extend(get_cross_validated_policies(
-            {'name': 'push-mpts', 'arm_knowledge' : {'name' : 'correct'}},
+            {'name': 'push-mpts', 'arm_knowledge' : {'name' : 'correct'}, 'T': T},
             {
                 'push_unlikely_arms' : [0,1,3,5],
                 'push_likely_arms': [0,1,3,5]

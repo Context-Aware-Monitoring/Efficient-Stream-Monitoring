@@ -264,9 +264,10 @@ class Experiment:
                 (_get_now_as_string(), self._experiment_name, os.getpid()))
 
         for pol_config in self._config['policies']:
-            regret_each_run = np.zeros(shape=(self._T, self._number_of_runs))
+            T = pol_config.get('T', self._T)
+            regret_each_run = np.zeros(shape=(T, self._number_of_runs))
             cum_regret_each_run = np.zeros(
-                shape=(self._T, self._number_of_runs))
+                shape=(T, self._number_of_runs))
 
             for current_run in range(self._number_of_runs):
                 pol = self._create_policy(pol_config)
