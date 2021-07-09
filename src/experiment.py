@@ -12,7 +12,7 @@ import yaml
 import numpy as np
 import pandas as pd
 from models.domain_knowledge import GraphArmKnowledge, RandomGraphKnowledge, WrongGraphArmknowledge, SyntheticGraphArmKnowledge, WrongSyntheticGraphArmKnowledge, ArmKnowledge, SyntheticPushArmKnowledge, PushArmKnowledge, SimiliarPushArmKnowledge, SyntheticStaticPushKnowledge, WrongSyntheticStaticPushKnowledge
-from models.policy import RandomPolicy, MPTS, PushMPTS, CPushMpts, CBFullModel, CBStreamingModel, AWCPushMpts, CBMPTS
+from models.policy import RandomPolicy, MPTS, PushMPTS, CPushMpts, CBFullModel, CBStreamingModel, AWCPushMpts, CBMPTS, MultiCPushMpts
 
 DATA_DIR = '%s/data' % dirname(dirname(abspath(__file__)))
 SERIALIZATION_DIR = '%s/processed/experiment_results/' % DATA_DIR
@@ -219,6 +219,8 @@ class Experiment:
         elif name == 'cpush-mpts':
             pol = CPushMpts(self._L, self._reward_df,
                             self._seed, context, **config_for_policy)
+        elif name == 'multi-cpush-mpts':
+            pol = MultiCPushMpts(self._L, self._reward_df, self._seed, context, **config_for_policy)
         elif name == 'awcpush-mpts':
             pol = AWCPushMpts(self._L, self._reward_df,
                               self._seed, context, **config_for_policy)

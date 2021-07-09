@@ -141,6 +141,77 @@ def _generate_synthetic_experiments_for_static_push():
                         global_config.EXPERIMENT_CONFIG_DIR, dist, arms, T, L, run+1), 'w') as outfile:
                     yaml.dump(config, outfile, default_flow_style=False)
 
+def _generate_synthetic_experiments_for_push_many_contexts():
+    c = 0.3
+    pc = 0.2
+    arms = 100
+    for run in range(3):
+        for T, dist, no_contexts in product([10, 100, 500, 1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25'], np.arange(2,10)):
+            reward = np.zeros(shape=(T,arms))
+
+            context = np.zeros(T * arms)
+            total_num_pushes = int(np.floor(T * arms * pc))
+            context[rnd.choice(T * arms, total_num_pushes, replace=False)] = rnd.choice(np.arange(1,no_contexts+1), total_num_pushes)
+            pushed_mus_per_context = rnd.choice([0.1,0.2,0.3], no_contexts)
+
+            mus = -np.sort(-rnd.uniform(0, 1-c, arms))
+            reward_means = np.tile(mus, T)
+
+            for i,noc in enumerate(np.arange(1, no_contexts+1)):
+                reward_means[context == noc] += pushed_mus_per_context[i]
+
+            if dist == 'bern':
+                reward = rnd.binomial(1, reward_means).reshape((T, arms))
+            else:
+                if dist == 'norm-sigma-0.1':
+                    sigmas = rnd.uniform(0, 0.1, arms)
+                elif dist == 'norm-sigma-0.25':
+                    sigmas = rnd.uniform(0, 0.25, arms)
+                reward = np.minimum(np.maximum(0, rnd.normal(reward_means, np.tile(sigmas, T),)), 1).reshape((T, arms))
+
+            context = context.reshape((T, arms))
+            context_path = '%s/context_synthetic_push_contexts_%d_T_%d_run_%d.csv' % (
+                    global_config.CONTEXT_DIR, no_contexts, T, run + 1)
+
+            reward_path = '%s/synthetic/reward_synthetic_push_contexts_%d_T_%d_run_%d.csv' % (
+                    global_config.REWARDS_DIR, no_contexts, T, run + 1)
+
+            pd.DataFrame(data = reward).to_csv(reward_path)
+            pd.DataFrame(data = context).to_csv(context_path)
+
+            cpush = pushed_mus_per_context * 10
+            cpush[cpush == 1.0] = 1.5
+            cpush = cpush.tolist()
+            
+            for L in range(1,51):
+                policies = [{'name' : 'mpts', 'identifier': 'baseline'}, {'name': 'cbmpts', 'context_path' : context_path}]
+                policies.append(
+                    {
+                        'name': 'multi-cpush-mpts',
+                        'context_path' : context_path,
+                        'arm_knowledge' : {'name': 'synthetic-dynamic-push'},
+                        'push_kind' : 'multiply',
+                        'cpush': cpush,
+                        'learn_pushed' : False
+                    })
+
+
+                config = {
+                        'policies': policies,
+                        'reward_path': reward_path,
+                        'seed': rnd.randint(10000),
+                        'L': L,
+                        'c': c,
+                        'pc': pc,
+                        'T': T,
+                        'dist' : dist,
+                        'no_context' : int(no_contexts)
+                    }
+
+                with open('%s/synthetic_push_contexts_%d_dist_%s_T_%d_L_%d_run_%d.yml' % (
+                            global_config.EXPERIMENT_CONFIG_DIR, no_contexts, dist, T, L, run + 1), 'w') as outfile:
+                        yaml.dump(config, outfile, default_flow_style=False)
+
 def _generate_synthetic_experiments_for_push():
     for run in range(3):
         for c, T, dist in product([0.1,0.2,0.3,0.5], [10,100,500,1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25']):
@@ -627,14 +698,15 @@ def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
 
-    _generate_mpts()
+    # _generate_mpts()
     # _generate_sim_cpush_mpts()
     # _generate_cpush_mpts()
     # _generate_cb()
     # _generate_synthetic_experiments_for_gk()
     # _generate_synthetic_experiments_for_static_push()
     # _generate_synthetic_experiments_for_push()
-    _generate_push_mpts()
+    _generate_synthetic_experiments_for_push_many_contexts()    
+    # _generate_push_mpts()
 
 
 def _write_config_for_params(
