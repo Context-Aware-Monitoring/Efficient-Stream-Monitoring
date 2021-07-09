@@ -264,7 +264,7 @@ class Experiment:
                 (_get_now_as_string(), self._experiment_name, os.getpid()))
 
         for pol_config in self._config['policies']:
-            T = pol_config.get('T', self._T)
+            T = T if pol_config.get('T', self._T) is not None else self._T
             regret_each_run = np.zeros(shape=(T, self._number_of_runs))
             cum_regret_each_run = np.zeros(
                 shape=(T, self._number_of_runs))
