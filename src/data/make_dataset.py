@@ -146,7 +146,7 @@ def _generate_synthetic_experiments_for_push_many_contexts():
     pc = 0.2
     arms = 100
     for run in range(3):
-        for T, dist, no_contexts in product([10, 100, 500, 1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25'], np.arange(2,10)):
+        for T, dist, no_contexts in product([10, 100, 500, 1000], ['bern', 'norm-sigma-0.1', 'norm-sigma-0.25'], np.arange(1,15)):
             reward = np.zeros(shape=(T,arms))
 
             context = np.zeros(T * arms)
@@ -184,7 +184,20 @@ def _generate_synthetic_experiments_for_push_many_contexts():
             cpush = cpush.tolist()
             
             for L in range(1,51):
-                policies = [{'name' : 'mpts', 'identifier': 'baseline'}, {'name': 'cbmpts', 'context_path' : context_path}]
+                policies = [
+                    {'name' : 'mpts', 'identifier': 'baseline'},
+                    {'name': 'cbmpts', 'context_path' : context_path},
+                    {
+                        'name':'cb-streaming-model',
+                        'context_path' : context_path,
+                        'max_iter' : 1000,
+                        'scaler_sample_size' : int(T * arms * 0.25),
+                        'batch_size' : 10,
+                        'base_algorithm_name' : 'linear_regression',
+                        'algorithm_name' : 'bootstrapped_ucb'
+                    }
+                    
+                ]
                 policies.append(
                     {
                         'name': 'multi-cpush-mpts',
