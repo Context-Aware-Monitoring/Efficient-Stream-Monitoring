@@ -462,8 +462,8 @@ def _generate_push_mpts():
     policies.extend(get_cross_validated_policies(
         {'name': 'push-mpts', 'arm_knowledge' : {'name' : 'correct'}},
         {
-            'push_unlikely_arms' : [1,3,5,10],
-            # 'push_likely_arms': [1,3,5,10],
+            'push_unlikely_arms' : [0,1,3,5],
+            'push_likely_arms': [0,1,3,5]
             # 'push_temporal_correlated_arms': [1,3,5,10]
         }))
 
@@ -493,10 +493,10 @@ def _generate_mpts():
     #     )
     # )
 
-    if T is not None:
-        _write_configs_for_policies(policies, name='mpts_T_%d' % T)
-    else:
-        _write_configs_for_policies(policies, name='mpts_T')
+        if T is not None:
+            _write_configs_for_policies(policies, name='mpts_T_%d' % T)
+        else:
+            _write_configs_for_policies(policies, name='mpts_T')
 
 def _generate_cb():
     policies = [{'name' : 'mpts', 'identifier' : 'baseline'}, {'name': 'random'}]
@@ -630,7 +630,7 @@ def _generate_experiment_configs():
     # _generate_synthetic_experiments_for_gk()
     # _generate_synthetic_experiments_for_static_push()
     # _generate_synthetic_experiments_for_push()
-    # _generate_push_mpts()
+    _generate_push_mpts()
 
 
 def _write_config_for_params(
