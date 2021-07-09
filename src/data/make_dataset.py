@@ -191,7 +191,7 @@ def _generate_synthetic_experiments_for_push_many_contexts():
                         'name':'cb-streaming-model',
                         'context_path' : context_path,
                         'max_iter' : 1000,
-                        'scaler_sample_size' : int(T * arms * 0.25),
+                        'scaler_sample_size' : int(T * 0.25),
                         'batch_size' : 10,
                         'base_algorithm_name' : 'linear_regression',
                         'algorithm_name' : 'bootstrapped_ucb'
