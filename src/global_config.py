@@ -13,7 +13,7 @@ Ls = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
 THRESHOLDS = [0.6, 0.7]
 REWARD_KINDS = ['top','continous', 'threshold']
 BINARY_REWARD_KINDS = ['top', 'threshold']
-SEQ = [True]
+SEQ = [False]
 
 DATA_DIR = '%s/data' % (dirname(dirname(abspath(__file__))))
 CONTEXT_DIR = '%s/processed/context' % DATA_DIR

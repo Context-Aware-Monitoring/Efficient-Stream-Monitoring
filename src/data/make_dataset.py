@@ -708,8 +708,8 @@ def _generate_experiment_configs():
     # _generate_synthetic_experiments_for_gk()
     # _generate_synthetic_experiments_for_static_push()
     # _generate_synthetic_experiments_for_push()
-    _generate_synthetic_experiments_for_push_many_contexts()    
-    # _generate_push_mpts()
+    # _generate_synthetic_experiments_for_push_many_contexts()    
+    _generate_push_mpts()
 
 
 def _write_config_for_params(
