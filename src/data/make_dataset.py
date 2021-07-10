@@ -152,7 +152,7 @@ def _generate_synthetic_experiments_for_push_many_contexts():
             context = np.zeros(T * arms)
             total_num_pushes = int(np.floor(T * arms * pc))
             context[rnd.choice(T * arms, total_num_pushes, replace=False)] = rnd.choice(np.arange(1,no_contexts+1), total_num_pushes)
-            pushed_mus_per_context = rnd.choice([0.1,0.2,0.3], no_contexts)
+            pushed_mus_per_context = rnd.uniform(0.1, 0.3, no_contexts)
 
             mus = -np.sort(-rnd.uniform(0, 1-c, arms))
             reward_means = np.tile(mus, T)
@@ -701,14 +701,14 @@ def _generate_experiment_configs():
     """Generates the yaml files that contain the configs of the experiments."""
     print('Generate experiment configs')
 
-    _generate_mpts()
+    # _generate_mpts()
     # _generate_sim_cpush_mpts()
     # _generate_cpush_mpts()
     # _generate_cb()
     # _generate_synthetic_experiments_for_gk()
     # _generate_synthetic_experiments_for_static_push()
     # _generate_synthetic_experiments_for_push()
-    # _generate_synthetic_experiments_for_push_many_contexts()    
+    _generate_synthetic_experiments_for_push_many_contexts()    
     # _generate_push_mpts()
 
 
