@@ -13,7 +13,7 @@ Ls = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
 THRESHOLDS = [0.6, 0.7]
 REWARD_KINDS = ['top','continous', 'threshold']
 BINARY_REWARD_KINDS = ['top', 'threshold']
-SEQ = [False]
+SEQ = [True]
 
 DATA_DIR = '%s/data' % (dirname(dirname(abspath(__file__))))
 CONTEXT_DIR = '%s/processed/context' % DATA_DIR
@@ -37,7 +37,7 @@ GRAPH_DOMAIN_KNOWLEDGES = [
 ]
 
 GRAPH_DOMAIN_KNOWLEDGES.extend([
-    {'name' : 'correct', 'weight': weight, 'only_push_arms_that_were_not_picked' : opatwnp} for weight, opatwnp in product([0.8,1.0], [True, False])
+    {'name' : 'correct', 'weight': weight, 'only_push_arms_that_were_not_picked' : opatwnp} for weight, opatwnp in product([0.2, 0.5, 0.8,1.0], [True, False])
 ])
 
 # GRAPH_DOMAIN_KNOWLEDGES.extend([
